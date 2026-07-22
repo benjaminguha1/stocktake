@@ -29,3 +29,7 @@ This first build saves data in the current browser profile (`localStorage`), whi
 ## Working with GitHub
 
 Use `main` for stable, working code. Make future changes on a new branch, run `npm run check`, then open a pull request back into `main`. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full workflow.
+
+## Live demo
+
+The `Deploy live demo` workflow publishes the static app to GitHub Pages whenever `main` changes. In the repository’s **Settings → Pages**, select **GitHub Actions** as the publishing source to activate the first deployment.
