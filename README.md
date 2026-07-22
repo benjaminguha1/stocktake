@@ -25,3 +25,7 @@ Open the address shown in the terminal. The app is deliberately dependency-light
 ## Data and rollout note
 
 This first build saves data in the current browser profile (`localStorage`), which makes it usable immediately and retains usage history on that device. A shared staff rollout should move the same data model to the CoffeeCalc-style authenticated API and D1 database, so all staff work from one central stock record.
+
+## Working with GitHub
+
+Use `main` for stable, working code. Make future changes on a new branch, run `npm run check`, then open a pull request back into `main`. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full workflow.
