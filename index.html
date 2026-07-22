@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2f271f" />
+    <title>Josie Coffee · Stocktake</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#dashboard" data-route="dashboard" aria-label="Josie Coffee Stocktake home">
+          <span class="brand-mark">J</span>
+          <span><strong>josie</strong><small>COFFEE · STOCKTAKE</small></span>
+        </a>
+
+        <nav class="main-nav" aria-label="Main navigation">
+          <button class="nav-item active" data-route="dashboard"><span class="nav-icon">⌂</span>Overview</button>
+          <button class="nav-item" data-route="products"><span class="nav-icon">▦</span>Products <span class="nav-count" id="product-count">0</span></button>
+          <button class="nav-item" data-route="stocktake"><span class="nav-icon">✓</span>Stocktake</button>
+          <button class="nav-item" data-route="orders"><span class="nav-icon">↗</span>Order list <span class="nav-count warning" id="order-count">0</span></button>
+          <button class="nav-item" data-route="insights"><span class="nav-icon">◔</span>Usage insights</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="store-switcher"><span class="store-dot"></span><span><strong>Newtown</strong><small>Main stockroom</small></span><span class="chevron">⌄</span></div>
+          <button class="help-link" data-action="show-help">Need a hand?<span>?</span></button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="crumb"><span id="page-eyebrow">STOCKTAKE</span><h1 id="page-title">Good morning, Josie.</h1></div>
+          <div class="topbar-actions">
+            <span class="today" id="today-label"></span>
+            <button class="icon-button" data-action="show-notifications" aria-label="Notifications"><span>♧</span><i></i></button>
+            <button class="avatar" data-action="show-help" aria-label="Open account menu">JG</button>
+          </div>
+        </header>
+
+        <section id="dashboard" class="view active" data-view="dashboard">
+          <div class="hero-row">
+            <div><p class="kicker">TUESDAY CHECK-IN</p><h2>Your stock, at a glance.</h2><p class="muted">A quiet stockroom makes for a smooth service.</p></div>
+            <button class="button primary" data-action="start-stocktake"><span>+</span> Start a stocktake</button>
+          </div>
+
+          <div class="metric-grid" id="metrics"></div>
+
+          <div class="content-grid dashboard-grid">
+            <section class="panel panel-wide">
+              <div class="panel-heading"><div><p class="kicker">ACTION REQUIRED</p><h3>Needs ordering</h3></div><button class="text-button" data-route="orders">View order list <span>→</span></button></div>
+              <div class="order-preview" id="order-preview"></div>
+            </section>
+            <section class="panel stocktake-card">
+              <div class="panel-heading"><div><p class="kicker">LAST CHECK</p><h3>Stocktake rhythm</h3></div><span class="pill success">On track</span></div>
+              <div class="stocktake-stat"><strong id="days-since-stocktake">—</strong><span>days since your last<br />full stocktake</span></div>
+              <div class="progress-meta"><span>Weekly rhythm</span><strong id="stocktake-rhythm">0 / 1 complete</strong></div>
+              <div class="progress"><span id="stocktake-progress"></span></div>
+              <button class="button secondary full" data-action="start-stocktake">Start stocktake <span>→</span></button>
+            </section>
+          </div>
+
+          <div class="content-grid dashboard-grid lower-grid">
+            <section class="panel panel-wide">
+              <div class="panel-heading"><div><p class="kicker">MOVEMENT</p><h3>Most-used this month</h3></div><button class="text-button" data-route="insights">Usage insights <span>→</span></button></div>
+              <div class="usage-list" id="top-usage"></div>
+            </section>
+            <section class="tip-card"><span class="spark">✦</span><p class="kicker">SMART NOTE</p><h3 id="smart-note-title">Learning your rhythm</h3><p id="smart-note-text">Complete a few stocktakes and we’ll start to suggest better par levels.</p><button class="text-button" data-route="insights">See recommendation <span>→</span></button></section>
+          </div>
+        </section>
+
+        <section id="products" class="view" data-view="products">
+          <div class="view-header"><div><p class="kicker">INVENTORY</p><h2>Products</h2><p class="muted">Everything you keep, in one calm place.</p></div><div class="view-actions"><button class="button secondary" data-action="download-template">Download template</button><label class="button secondary file-label">Upload sheet<input id="bulk-upload" type="file" accept=".xlsx,.xls,.csv" hidden /></label><button class="button primary" data-action="open-product-form"><span>+</span> Add product</button></div></div>
+          <div class="toolbar"><label class="search"><span>⌕</span><input id="product-search" type="search" placeholder="Search products, SKU or supplier" /></label><select id="product-status-filter" aria-label="Filter product status"><option value="all">All stock levels</option><option value="below">Below minimum</option><option value="low">Getting low</option><option value="good">Healthy</option></select><select id="product-supplier-filter" aria-label="Filter product supplier"><option value="all">All suppliers</option></select><span class="toolbar-summary" id="product-summary"></span><button class="text-button export-button" data-action="download-products">Export <span>↓</span></button></div>
+          <div class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Product</th><th>Supplier</th><th>Location</th><th>Current stock</th><th>Minimum</th><th>Par level</th><th>Status</th><th></th></tr></thead><tbody id="products-table"></tbody></table></div><div class="table-footer" id="products-footer"></div></div>
+        </section>
+
+        <section id="stocktake" class="view" data-view="stocktake">
+          <div class="view-header"><div><p class="kicker">COUNT WITH CONFIDENCE</p><h2>Stocktake</h2><p class="muted">Count what matters today. We’ll capture the rest.</p></div><button class="button primary" data-action="start-stocktake"><span>+</span> New stocktake</button></div>
+          <div class="stocktake-options">
+            <button class="take-option" data-action="start-stocktake" data-take-type="full"><span class="take-icon">▦</span><span><strong>Full stocktake</strong><small>Count every active product</small></span><b>→</b></button>
+            <button class="take-option" data-action="start-stocktake" data-take-type="low"><span class="take-icon">↓</span><span><strong>Low-use items</strong><small>Quick count for items with little movement</small></span><b>→</b></button>
+            <button class="take-option" data-action="choose-supplier-take"><span class="take-icon">⌁</span><span><strong>By supplier</strong><small>Count a supplier delivery group</small></span><b>→</b></button>
+          </div>
+          <section class="panel history-panel"><div class="panel-heading"><div><p class="kicker">YOUR RECORD</p><h3>Recent stocktakes</h3></div></div><div id="stocktake-history"></div></section>
+        </section>
+
+        <section id="orders" class="view" data-view="orders">
+          <div class="view-header"><div><p class="kicker">READY TO ORDER</p><h2>Order list</h2><p class="muted">Items below their minimum, grouped for an easy order.</p></div><div class="view-actions"><button class="button secondary" data-action="download-orders">Download order list</button><button class="button primary" data-action="print-orders">Print / save PDF</button></div></div>
+          <div class="order-summary" id="order-summary"></div>
+          <div id="supplier-orders" class="supplier-orders"></div>
+        </section>
+
+        <section id="insights" class="view" data-view="insights">
+          <div class="view-header"><div><p class="kicker">LONG-TERM VIEW</p><h2>Usage insights</h2><p class="muted">Make future ordering calmer with the record you are building.</p></div><select id="insight-range" aria-label="Select insight time range"><option value="28">Last 4 weeks</option><option value="56">Last 8 weeks</option><option value="84">Last 12 weeks</option></select></div>
+          <div class="metric-grid insight-metrics" id="insight-metrics"></div>
+          <div class="content-grid insight-grid"><section class="panel panel-wide"><div class="panel-heading"><div><p class="kicker">WEEKLY USAGE</p><h3>What’s moving</h3></div><span class="legend"><i></i>Average units used per week</span></div><div class="bar-chart" id="usage-chart"></div></section><section class="panel recommendation-panel"><div class="panel-heading"><div><p class="kicker">RECOMMENDED</p><h3>Par level tune-up</h3></div><span class="spark">✦</span></div><div id="recommendations"></div></section></div>
+          <section class="panel table-panel usage-table"><div class="panel-heading"><div><p class="kicker">PRODUCT DETAIL</p><h3>Usage history</h3></div><button class="text-button" data-action="download-usage">Export usage <span>↓</span></button></div><div class="table-wrap"><table><thead><tr><th>Product</th><th>Current</th><th>4-week usage</th><th>Weekly average</th><th>Trend</th><th>Suggested par</th></tr></thead><tbody id="usage-table"></tbody></table></div></section>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-layer" id="modal-layer" aria-hidden="true">
+      <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"></div>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

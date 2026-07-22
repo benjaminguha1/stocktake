@@ -1,0 +1,15 @@
+{
+  "name": "stocktake",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Josie Coffee Stocktake — internal stock management.",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "check": "node --check app.js && node --check server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
