@@ -257,7 +257,7 @@ function renderProducts() {
 function renderStocktakes() {
   const history = [...state.stocktakes].sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
   $('#stocktake-history').innerHTML = history.length
-    ? history.slice(0, 8).map((take) => `<div class="history-row"><div><strong>${escapeHtml(take.label)}</strong><small>${take.productCount} product${take.productCount === 1 ? '' : 's'} counted</small></div><span class="history-date">${displayDate(take.completedAt)}</span><span class="pill ${take.type === 'full' ? 'success' : 'neutral'}">${take.type === 'full' ? 'Full count' : take.type === 'supplier' ? 'Supplier' : 'Quick count'}</span></div>`).join('')
+    ? history.slice(0, 8).map((take) => `<div class="history-row"><div><strong>${escapeHtml(take.label)}</strong><small>${take.productCount} product${take.productCount === 1 ? '' : 's'} counted</small></div><span class="history-date">${displayDate(take.completedAt)}</span><span class="pill ${take.type === 'full' ? 'success' : 'neutral'}">${take.type === 'full' ? 'Full count' : take.type === 'supplier' ? 'Supplier' : take.type === 'section' ? 'Section' : 'Quick count'}</span></div>`).join('')
     : '<div class="order-preview-empty">Your completed stocktakes will appear here.</div>';
 }
 
@@ -356,9 +356,9 @@ function productForm(product) {
   });
 }
 
-function startStocktake(type = 'full', supplier = '') {
-  const eligible = state.products.filter((product) => type === 'full' || (type === 'low' ? isLowUse(product) : product.supplier === supplier));
-  const labels = { full: 'Full stocktake', low: 'Low-use item stocktake', supplier: `${supplier} stocktake` };
+function startStocktake(type = 'full', group = '') {
+  const eligible = state.products.filter((product) => type === 'full' || (type === 'low' ? isLowUse(product) : type === 'supplier' ? product.supplier === group : product.location === group));
+  const labels = { full: 'Full stocktake', low: 'Low-use item stocktake', supplier: `${group} stocktake`, section: `${group} stocktake` };
   modal(labels[type], `${eligible.length} product${eligible.length === 1 ? '' : 's'} to count. Leave a field unchanged to keep the recorded level.`, `
     <div class="count-summary"><strong>Count today’s stock</strong><span>${eligible.length} lines</span></div>
     <input class="count-search" id="count-search" type="search" placeholder="Find a product to count" />
@@ -387,6 +387,12 @@ function chooseSupplierTake() {
   const suppliers = [...new Set(state.products.map((product) => product.supplier))].sort();
   modal('Stocktake by supplier', 'Choose the delivery group you want to count.', `<div class="field"><label for="take-supplier">Supplier</label><select id="take-supplier">${suppliers.map((supplier) => `<option value="${escapeHtml(supplier)}">${escapeHtml(supplier)}</option>`).join('')}</select></div>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" id="continue-supplier-take">Continue</button>');
   $('#continue-supplier-take').addEventListener('click', () => startStocktake('supplier', $('#take-supplier').value));
+}
+
+function chooseSectionTake() {
+  const sections = [...new Set(state.products.map((product) => product.location))].sort();
+  modal('Stocktake by section', 'Choose the area you want to count.', `<div class="field"><label for="take-section">Section</label><select id="take-section">${sections.map((section) => `<option value="${escapeHtml(section)}">${escapeHtml(section)}</option>`).join('')}</select></div>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" id="continue-section-take">Continue</button>');
+  $('#continue-section-take').addEventListener('click', () => startStocktake('section', $('#take-section').value));
 }
 
 function toRows(products) {
@@ -512,6 +518,7 @@ document.addEventListener('click', (event) => {
     'open-product-form': () => productForm(),
     'edit-product': () => productForm(product),
     'start-stocktake': () => startStocktake(action.dataset.takeType || 'full'),
+    'choose-section-take': chooseSectionTake,
     'choose-supplier-take': chooseSupplierTake,
     'download-template': downloadTemplate,
     'download-products': downloadProducts,
