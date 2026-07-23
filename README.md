@@ -16,7 +16,7 @@ Open the address shown in the terminal. The app is deliberately dependency-light
 
 ## What it covers
 
-- Product library with automatic `JC-` SKUs, supplier, par, minimum, current stock, unit and location.
+- Product library with automatic `JC-` SKUs, supplier, par, minimum, current stock, unit and location; products can be removed individually or in a selected group.
 - Excel template download, product export, and XLSX/XLS/CSV bulk import. Existing SKUs are updated; blank SKUs are generated.
 - Full, low-use and supplier stocktakes. Count differences are retained as usage records.
 - Supplier-grouped order list for products below minimum, including the quantity needed to restore par level.

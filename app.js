@@ -59,6 +59,7 @@ let activeRoute = 'dashboard';
 let productQuery = '';
 let productStatus = 'all';
 let productSupplier = 'all';
+let selectedProductIds = new Set();
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -242,15 +243,24 @@ function filteredProducts() {
 }
 
 function renderProducts() {
+  const activeIds = new Set(state.products.map((product) => product.id));
+  selectedProductIds = new Set([...selectedProductIds].filter((id) => activeIds.has(id)));
   const suppliers = [...new Set(state.products.map((product) => product.supplier))].sort();
   const supplierSelect = $('#product-supplier-filter');
   supplierSelect.innerHTML = `<option value="all">All suppliers</option>${suppliers.map((supplier) => `<option value="${escapeHtml(supplier)}">${escapeHtml(supplier)}</option>`).join('')}`;
   supplierSelect.value = productSupplier;
   const products = filteredProducts();
+  const visibleSelected = products.filter((product) => selectedProductIds.has(product.id));
+  const selectedCount = selectedProductIds.size;
   $('#product-summary').textContent = `${products.length} of ${state.products.length} products`;
+  $('#product-bulk-actions').hidden = selectedCount === 0;
+  $('#selected-product-count').textContent = `${selectedCount} selected`;
+  const selectAll = $('#select-all-products');
+  selectAll.checked = products.length > 0 && visibleSelected.length === products.length;
+  selectAll.indeterminate = visibleSelected.length > 0 && visibleSelected.length < products.length;
   $('#products-table').innerHTML = products.length
-    ? products.map((product) => `<tr><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)}</small></td><td>${escapeHtml(product.supplier)}</td><td><span class="cell-subtitle">${escapeHtml(product.location)}</span></td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td>${formatQuantity(product, product.minimum)}</td><td>${formatQuantity(product, product.par)}</td><td>${statusMarkup(product)}</td><td><button class="row-action" data-action="edit-product" data-product-id="${product.id}" aria-label="Edit ${escapeHtml(product.name)}">•••</button></td></tr>`).join('')
-    : '<tr><td colspan="8"><div class="order-preview-empty">No products match those filters.</div></td></tr>';
+    ? products.map((product) => `<tr><td class="select-cell"><input type="checkbox" data-product-select data-product-id="${product.id}" ${selectedProductIds.has(product.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(product.name)}" /></td><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)}</small></td><td>${escapeHtml(product.supplier)}</td><td><span class="cell-subtitle">${escapeHtml(product.location)}</span></td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td>${formatQuantity(product, product.minimum)}</td><td>${formatQuantity(product, product.par)}</td><td>${statusMarkup(product)}</td><td class="row-actions"><button class="row-action edit-action" data-action="edit-product" data-product-id="${product.id}">Edit</button><button class="row-action delete-action" data-action="confirm-delete-product" data-product-id="${product.id}">Delete</button></td></tr>`).join('')
+    : '<tr><td colspan="9"><div class="order-preview-empty">No products match those filters.</div></td></tr>';
   $('#products-footer').textContent = 'Stock levels update whenever a stocktake is completed.';
 }
 
@@ -353,6 +363,22 @@ function productForm(product) {
     if (product) Object.assign(product, values);
     else state.products.push({ id: `p-${Date.now().toString(36)}`, ...values });
     persist(); renderAll(); closeModal(); toast(product ? 'Product updated.' : 'Product added to stockroom.');
+  });
+}
+
+function confirmDeleteProducts(productIds) {
+  const ids = new Set(productIds);
+  const products = state.products.filter((product) => ids.has(product.id));
+  if (!products.length) return toast('Those products are no longer available.');
+  const names = products.slice(0, 3).map((product) => escapeHtml(product.name)).join(', ');
+  const more = products.length > 3 ? ` and ${products.length - 3} more` : '';
+  const title = products.length === 1 ? 'Delete this product?' : `Delete ${products.length} products?`;
+  modal(title, 'This cannot be undone.', `<p class="modal-intro"><strong>${names}${more}</strong> will be removed from your product library. Their stored usage records will also be removed; past stocktake summaries will remain.</p>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button destructive" id="confirm-product-deletion">Delete permanently</button>');
+  $('#confirm-product-deletion').addEventListener('click', () => {
+    state.products = state.products.filter((product) => !ids.has(product.id));
+    state.usageRecords = state.usageRecords.filter((record) => !ids.has(record.productId));
+    selectedProductIds = new Set([...selectedProductIds].filter((id) => !ids.has(id)));
+    persist(); renderAll(); closeModal(); toast(`${products.length} product${products.length === 1 ? '' : 's'} deleted.`);
   });
 }
 
@@ -517,6 +543,8 @@ document.addEventListener('click', (event) => {
     'close-modal': closeModal,
     'open-product-form': () => productForm(),
     'edit-product': () => productForm(product),
+    'confirm-delete-product': () => confirmDeleteProducts(product ? [product.id] : []),
+    'confirm-delete-selected': () => confirmDeleteProducts([...selectedProductIds]),
     'start-stocktake': () => startStocktake(action.dataset.takeType || 'full'),
     'choose-section-take': chooseSectionTake,
     'choose-supplier-take': chooseSupplierTake,
@@ -535,6 +563,19 @@ $('#modal-layer').addEventListener('click', (event) => { if (event.target.id ===
 $('#product-search').addEventListener('input', (event) => { productQuery = event.target.value; renderProducts(); });
 $('#product-status-filter').addEventListener('change', (event) => { productStatus = event.target.value; renderProducts(); });
 $('#product-supplier-filter').addEventListener('change', (event) => { productSupplier = event.target.value; renderProducts(); });
+document.addEventListener('change', (event) => {
+  const target = event.target;
+  if (target.matches('[data-product-select]')) {
+    if (target.checked) selectedProductIds.add(target.dataset.productId);
+    else selectedProductIds.delete(target.dataset.productId);
+    renderProducts();
+  }
+  if (target.id === 'select-all-products') {
+    const visibleIds = filteredProducts().map((product) => product.id);
+    visibleIds.forEach((id) => target.checked ? selectedProductIds.add(id) : selectedProductIds.delete(id));
+    renderProducts();
+  }
+});
 $('#insight-range').addEventListener('change', renderInsights);
 $('#bulk-upload').addEventListener('change', (event) => { handleUpload(event.target.files[0]); event.target.value = ''; });
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && $('#modal-layer').classList.contains('open')) closeModal(); });
