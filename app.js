@@ -1,19 +1,33 @@
-const STORE_KEY = 'josieCoffeeStockroom.v1';
+const STORE_KEY = 'josieCoffeeStockroom.v2';
+const LEGACY_STORE_KEY = 'josieCoffeeStockroom.v1';
+const SYNC_PENDING_KEY = 'josieCoffeeStockroom.sync-pending';
 const DAY = 24 * 60 * 60 * 1000;
 
+const seedSuppliers = [
+  { id: 'MINOR-FIGURES', name: 'Minor Figures', orderingMethod: 'Order through Ordermentum', orderDays: 'M, TH', repContact: 'Orders team · orders@minorfigures.com', notes: 'Confirm oat milk availability before long weekends.' },
+  { id: 'DAIRY-FARMERS', name: 'Dairy Farmers', orderingMethod: 'Email: orders@dairyfarmers.com.au', orderDays: 'M, W, F', repContact: 'Dairy delivery desk · 1800 000 000', notes: 'Morning delivery preferred.' },
+  { id: 'SAMPLE-COFFEE', name: 'Sample Coffee', orderingMethod: 'Email: hello@samplecoffee.com.au', orderDays: 'M', repContact: 'Roastery support · hello@samplecoffee.com.au', notes: 'Order coffee by Monday for Thursday delivery.' },
+  { id: 'COFFEE-SUPREME', name: 'Coffee Supreme', orderingMethod: 'Email: orders@coffeesupreme.com', orderDays: 'TH', repContact: 'Customer service · orders@coffeesupreme.com', notes: '' },
+  { id: 'BIOPAK', name: 'BioPak', orderingMethod: 'Order through Ordermentum', orderDays: 'M, TH', repContact: 'Account support · support@biopak.com.au', notes: 'Bundle cups, lids and napkins into one order.' },
+  { id: 'COCA-COLA', name: 'Coca-Cola Europacific', orderingMethod: 'Rep order form', orderDays: 'TH', repContact: 'Beverage rep · deliveryissues@ccep.com', notes: '' },
+  { id: 'ESSENTIAL-INGREDIENT', name: 'Essential Ingredient', orderingMethod: 'Email: orders@essentialingredient.com.au', orderDays: 'TH', repContact: 'Wholesale desk · 02 0000 0000', notes: '' },
+  { id: 'MONIN', name: 'Monin', orderingMethod: 'Order through Ordermentum', orderDays: 'M', repContact: 'Hospitality support · orders@monin.com.au', notes: '' },
+  { id: 'ARKADIA', name: 'Arkadia', orderingMethod: 'Email: orders@arkadia.com.au', orderDays: 'M, TH', repContact: 'Customer care · 1300 000 000', notes: '' },
+];
+
 const seedProducts = [
-  { id: 'p-001', name: 'Oat milk', sku: 'JC-0001', supplier: 'Minor Figures', par: 48, minimum: 18, current: 14, location: 'Milk fridge', unit: 'L carton' },
-  { id: 'p-002', name: 'Full cream milk', sku: 'JC-0002', supplier: 'Dairy Farmers', par: 72, minimum: 26, current: 38, location: 'Milk fridge', unit: 'L bottle' },
-  { id: 'p-003', name: 'House blend coffee', sku: 'JC-0003', supplier: 'Sample Coffee', par: 18, minimum: 6, current: 4, location: 'Coffee shelf', unit: 'kg' },
-  { id: 'p-004', name: 'Single origin coffee', sku: 'JC-0004', supplier: 'Sample Coffee', par: 10, minimum: 3, current: 6, location: 'Coffee shelf', unit: 'kg' },
-  { id: 'p-005', name: 'Cold brew concentrate', sku: 'JC-0005', supplier: 'Coffee Supreme', par: 16, minimum: 5, current: 3, location: 'Under bench fridge', unit: 'L bottle' },
-  { id: 'p-006', name: 'Takeaway cups · 12 oz', sku: 'JC-0006', supplier: 'BioPak', par: 800, minimum: 240, current: 180, location: 'Dry store · A2', unit: 'cup' },
-  { id: 'p-007', name: 'Takeaway lids · 12 oz', sku: 'JC-0007', supplier: 'BioPak', par: 800, minimum: 240, current: 320, location: 'Dry store · A2', unit: 'lid' },
-  { id: 'p-008', name: 'Napkins', sku: 'JC-0008', supplier: 'BioPak', par: 1200, minimum: 400, current: 560, location: 'Dry store · B1', unit: 'napkin' },
-  { id: 'p-009', name: 'Sparkling water', sku: 'JC-0009', supplier: 'Coca-Cola Europacific', par: 48, minimum: 18, current: 22, location: 'Drinks fridge', unit: 'can' },
-  { id: 'p-010', name: 'Cocoa powder', sku: 'JC-0010', supplier: 'Essential Ingredient', par: 6, minimum: 2, current: 1, location: 'Dry store · C4', unit: 'kg' },
-  { id: 'p-011', name: 'Vanilla syrup', sku: 'JC-0011', supplier: 'Monin', par: 12, minimum: 4, current: 7, location: 'Back bar', unit: 'bottle' },
-  { id: 'p-012', name: 'Chai concentrate', sku: 'JC-0012', supplier: 'Arkadia', par: 12, minimum: 4, current: 2, location: 'Back bar', unit: 'L carton' },
+  { id: 'p-001', name: 'Oat milk', sku: 'JC-0001', supplierId: 'MINOR-FIGURES', par: 48, minimum: 18, current: 14, location: 'Milk fridge', unit: 'L carton' },
+  { id: 'p-002', name: 'Full cream milk', sku: 'JC-0002', supplierId: 'DAIRY-FARMERS', par: 72, minimum: 26, current: 38, location: 'Milk fridge', unit: 'L bottle' },
+  { id: 'p-003', name: 'House blend coffee', sku: 'JC-0003', supplierId: 'SAMPLE-COFFEE', par: 18, minimum: 6, current: 4, location: 'Coffee shelf', unit: 'kg' },
+  { id: 'p-004', name: 'Single origin coffee', sku: 'JC-0004', supplierId: 'SAMPLE-COFFEE', par: 10, minimum: 3, current: 6, location: 'Coffee shelf', unit: 'kg' },
+  { id: 'p-005', name: 'Cold brew concentrate', sku: 'JC-0005', supplierId: 'COFFEE-SUPREME', par: 16, minimum: 5, current: 3, location: 'Under bench fridge', unit: 'L bottle' },
+  { id: 'p-006', name: 'Takeaway cups · 12 oz', sku: 'JC-0006', supplierId: 'BIOPAK', par: 800, minimum: 240, current: 180, location: 'Dry store · A2', unit: 'cup' },
+  { id: 'p-007', name: 'Takeaway lids · 12 oz', sku: 'JC-0007', supplierId: 'BIOPAK', par: 800, minimum: 240, current: 320, location: 'Dry store · A2', unit: 'lid' },
+  { id: 'p-008', name: 'Napkins', sku: 'JC-0008', supplierId: 'BIOPAK', par: 1200, minimum: 400, current: 560, location: 'Dry store · B1', unit: 'napkin' },
+  { id: 'p-009', name: 'Sparkling water', sku: 'JC-0009', supplierId: 'COCA-COLA', par: 48, minimum: 18, current: 22, location: 'Drinks fridge', unit: 'can' },
+  { id: 'p-010', name: 'Cocoa powder', sku: 'JC-0010', supplierId: 'ESSENTIAL-INGREDIENT', par: 6, minimum: 2, current: 1, location: 'Dry store · C4', unit: 'kg' },
+  { id: 'p-011', name: 'Vanilla syrup', sku: 'JC-0011', supplierId: 'MONIN', par: 12, minimum: 4, current: 7, location: 'Back bar', unit: 'bottle' },
+  { id: 'p-012', name: 'Chai concentrate', sku: 'JC-0012', supplierId: 'ARKADIA', par: 12, minimum: 4, current: 2, location: 'Back bar', unit: 'L carton' },
 ];
 
 function isoDaysAgo(days) {
@@ -35,7 +49,8 @@ function seedUsage() {
 
 function makeInitialState() {
   return {
-    products: seedProducts,
+    suppliers: seedSuppliers.map((supplier) => ({ ...supplier })),
+    products: seedProducts.map((product) => ({ ...product })),
     usageRecords: seedUsage(),
     stocktakes: [
       { id: 'st-seed-1', type: 'full', label: 'Full stocktake', productCount: 12, completedAt: isoDaysAgo(5) },
@@ -44,10 +59,74 @@ function makeInitialState() {
   };
 }
 
+function supplierCode(value) {
+  return String(value || 'SUPPLIER')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32) || 'SUPPLIER';
+}
+
+function uniqueSupplierId(value, usedIds) {
+  const base = supplierCode(value);
+  let id = base;
+  let index = 2;
+  while (usedIds.has(id)) { id = `${base}-${index}`; index += 1; }
+  usedIds.add(id);
+  return id;
+}
+
+function normaliseState(value) {
+  if (!value || !Array.isArray(value.products)) return makeInitialState();
+  const suppliers = [];
+  const usedIds = new Set();
+  const addSupplier = (candidate = {}) => {
+    const name = String(candidate.name || candidate.supplier || candidate.id || 'Unassigned supplier').trim() || 'Unassigned supplier';
+    const requestedId = supplierCode(candidate.id || name);
+    const existing = suppliers.find((supplier) => supplier.id === requestedId || supplier.name.toLowerCase() === name.toLowerCase());
+    if (existing) return existing;
+    const supplier = {
+      id: uniqueSupplierId(requestedId, usedIds),
+      name,
+      orderingMethod: String(candidate.orderingMethod || candidate.orderMethod || '').trim(),
+      orderDays: String(candidate.orderDays || '').trim(),
+      repContact: String(candidate.repContact || '').trim(),
+      notes: String(candidate.notes || '').trim(),
+    };
+    suppliers.push(supplier);
+    return supplier;
+  };
+
+  (Array.isArray(value.suppliers) ? value.suppliers : []).forEach(addSupplier);
+  const products = value.products.map((product, index) => {
+    const supplied = String(product.supplierId || product.supplier || '').trim();
+    const supplier = suppliers.find((item) => item.id === supplierCode(supplied) || item.name.toLowerCase() === supplied.toLowerCase())
+      || addSupplier({ id: supplied || `SUPPLIER-${index + 1}`, name: product.supplier || supplied || 'Unassigned supplier' });
+    return {
+      id: String(product.id || `p-import-${index + 1}`),
+      name: String(product.name || 'Untitled product').trim(),
+      sku: String(product.sku || `JC-IMPORT-${index + 1}`).trim().toUpperCase(),
+      supplierId: supplier.id,
+      par: cleanNumber(product.par),
+      minimum: cleanNumber(product.minimum),
+      current: cleanNumber(product.current),
+      location: String(product.location || 'Unassigned location').trim(),
+      unit: String(product.unit || 'unit').trim(),
+    };
+  });
+  return {
+    suppliers,
+    products,
+    usageRecords: Array.isArray(value.usageRecords) ? value.usageRecords : [],
+    stocktakes: Array.isArray(value.stocktakes) ? value.stocktakes : [],
+  };
+}
+
 function loadState() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORE_KEY));
-    if (saved?.products?.length) return saved;
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem(LEGACY_STORE_KEY));
+    if (saved?.products?.length) return normaliseState(saved);
   } catch (_) {
     // A fresh, working data set is safer than a broken local cache.
   }
@@ -60,12 +139,109 @@ let productQuery = '';
 let productStatus = 'all';
 let productSupplier = 'all';
 let selectedProductIds = new Set();
+let onlineSaveQueue = Promise.resolve();
+let onlineStorageAvailable = false;
+let onlineUser = null;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
-function persist() {
+function saveLocal({ synced = false } = {}) {
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  if (synced) localStorage.removeItem(SYNC_PENDING_KEY);
+  else localStorage.setItem(SYNC_PENDING_KEY, new Date().toISOString());
+}
+
+function setSaveStatus(stateName, message) {
+  const status = $('#save-status');
+  if (!status) return;
+  status.dataset.state = stateName;
+  $('#save-status-text').textContent = message;
+}
+
+function persist() {
+  saveLocal();
+  if (onlineStorageAvailable) void queueOnlineSave();
+}
+
+function supplierById(id) {
+  return state.suppliers.find((supplier) => supplier.id === id) || null;
+}
+
+function supplierName(product) {
+  return supplierById(product.supplierId)?.name || 'Unassigned supplier';
+}
+
+function supplierDetails(product) {
+  return supplierById(product.supplierId) || {
+    id: product.supplierId || 'UNASSIGNED', name: 'Unassigned supplier', orderingMethod: '', orderDays: '', repContact: '', notes: '',
+  };
+}
+
+function publicState() {
+  return JSON.parse(JSON.stringify(normaliseState(state)));
+}
+
+function queueOnlineSave() {
+  const snapshot = publicState();
+  setSaveStatus('saving', 'Saving online…');
+  onlineSaveQueue = onlineSaveQueue
+    .catch(() => undefined)
+    .then(async () => {
+      const response = await fetch('/api/state', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state: snapshot }),
+      });
+      if (!response.ok) throw new Error('Online save failed.');
+      if (JSON.stringify(publicState()) === JSON.stringify(snapshot)) saveLocal({ synced: true });
+      setSaveStatus('online', 'Saved online');
+    })
+    .catch(() => setSaveStatus('offline', 'Saved on this device · offline'));
+  return onlineSaveQueue;
+}
+
+async function initialiseOnlineState() {
+  setSaveStatus('connecting', 'Connecting online…');
+  try {
+    const authResponse = await fetch('/api/auth/status', { cache: 'no-store' });
+    if (!authResponse.ok) throw new Error('Authentication is unavailable.');
+    const auth = await authResponse.json();
+    if (!auth.hasUsers) {
+      onlineStorageAvailable = false;
+      showAccountGate('setup');
+      setSaveStatus('offline', 'Set up staff access');
+      return;
+    }
+    if (!auth.user) {
+      onlineStorageAvailable = false;
+      showAccountGate('login');
+      setSaveStatus('offline', 'Sign in to save online');
+      return;
+    }
+    hideAccountGate();
+    onlineUser = auth.user;
+    updateAccountButton();
+    onlineStorageAvailable = true;
+    if (localStorage.getItem(SYNC_PENDING_KEY)) {
+      await queueOnlineSave();
+      return;
+    }
+    const response = await fetch('/api/state', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Online storage is unavailable.');
+    const remote = await response.json();
+    if (remote.state) {
+      state = normaliseState(remote.state);
+      saveLocal({ synced: true });
+      renderAll();
+      setSaveStatus('online', 'Saved online');
+      return;
+    }
+    await queueOnlineSave();
+  } catch (_) {
+    onlineStorageAvailable = false;
+    setSaveStatus('offline', 'Saved on this device · offline');
+  }
 }
 
 function escapeHtml(value = '') {
@@ -75,6 +251,55 @@ function escapeHtml(value = '') {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function updateAccountButton() {
+  const button = $('#account-button');
+  if (!button || !onlineUser) return;
+  button.textContent = onlineUser.username.split(/[._\s-]+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'ST';
+  button.title = `Signed in as ${onlineUser.username}`;
+}
+
+function showAccountGate(mode, error = '') {
+  const layer = $('#account-layer');
+  layer.hidden = false;
+  const setup = mode === 'setup';
+  $('#account-card').innerHTML = `
+    <p class="kicker">JOSIE COFFEE · STOCKTAKE</p>
+    <h2>${setup ? 'Set up your staff account' : 'Sign in to Stocktake'}</h2>
+    <p>${setup ? 'Create the first administrator account. It protects the shared stockroom.' : 'Use your staff account to open the shared stockroom.'}</p>
+    ${error ? `<p class="account-error">${escapeHtml(error)}</p>` : ''}
+    <form id="account-form" class="form-grid">
+      ${setup ? '<div class="field full"><label for="account-username">Username</label><input id="account-username" name="username" required minlength="3" maxlength="40" autocomplete="username" placeholder="e.g. josie.manager" /></div><div class="field full"><label for="account-email">Email (optional)</label><input id="account-email" name="email" type="email" maxlength="254" autocomplete="email" placeholder="you@example.com" /></div>' : '<div class="field full"><label for="account-identifier">Username or email</label><input id="account-identifier" name="identifier" required maxlength="254" autocomplete="username" /></div>'}
+      <div class="field full"><label for="account-password">Password</label><input id="account-password" name="password" type="password" required minlength="10" maxlength="128" autocomplete="${setup ? 'new-password' : 'current-password'}" /></div>
+      ${setup ? '<div class="field full"><label for="account-confirm-password">Confirm password</label><input id="account-confirm-password" name="confirmPassword" type="password" required minlength="10" maxlength="128" autocomplete="new-password" /></div>' : ''}
+      <div class="field full"><button class="button primary" type="submit">${setup ? 'Create staff account' : 'Sign in'}</button></div>
+    </form>`;
+  $('#account-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const response = await fetch(`/api/auth/${setup ? 'setup' : 'login'}`, { method: 'POST', body: new FormData(event.currentTarget) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) return showAccountGate(mode, result.error || 'We could not complete that request.');
+    await initialiseOnlineState();
+  });
+}
+
+function hideAccountGate() {
+  $('#account-layer').hidden = true;
+}
+
+function showAccount() {
+  if (!onlineUser) return showAccountGate('login');
+  modal('Signed in', `You are signed in as ${onlineUser.username}.`, '<p class="modal-intro">Signing out leaves the offline cache on this device, but access to the shared stockroom will be removed.</p>', '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button destructive" data-action="sign-out">Sign out</button>');
+}
+
+async function signOut() {
+  try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) { /* Local preview has no account service. */ }
+  onlineUser = null;
+  onlineStorageAvailable = false;
+  closeModal();
+  showAccountGate('login');
+  setSaveStatus('offline', 'Sign in to save online');
 }
 
 function cleanNumber(value, fallback = 0) {
@@ -117,8 +342,8 @@ function statusMarkup(product) {
 function getOrders() {
   return state.products
     .filter((product) => product.current < product.minimum)
-    .map((product) => ({ ...product, toOrder: Math.max(0, product.par - product.current) }))
-    .sort((a, b) => a.supplier.localeCompare(b.supplier) || a.name.localeCompare(b.name));
+    .map((product) => ({ ...product, supplier: supplierDetails(product), toOrder: Math.max(0, product.par - product.current) }))
+    .sort((a, b) => a.supplier.name.localeCompare(b.supplier.name) || a.name.localeCompare(b.name));
 }
 
 function usageFor(productId, days = 28) {
@@ -192,12 +417,12 @@ function renderDashboard() {
   $('#metrics').innerHTML = [
     ['PRODUCTS TRACKED', state.products.length, 'Active stock lines', '▦'],
     ['NEED ATTENTION', low, low ? `${orders.length} below minimum` : 'Everything healthy', '↓'],
-    ['ORDER TODAY', orders.length, orders.length ? `${new Set(orders.map((item) => item.supplier)).size} suppliers` : 'Nothing to order', '↗'],
+    ['ORDER TODAY', orders.length, orders.length ? `${new Set(orders.map((item) => item.supplier.id)).size} suppliers` : 'Nothing to order', '↗'],
     ['4-WEEK MOVEMENT', formatNumber(totalUsage), 'Units counted as used', '◔'],
   ].map(([label, value, note, icon]) => `<article class="metric"><div class="metric-label"><span>${label}</span><i>${icon}</i></div><strong>${value}</strong><p>${note}</p></article>`).join('');
 
   $('#order-preview').innerHTML = orders.length
-    ? orders.slice(0, 4).map((product) => `<div class="order-preview-row"><div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)} · ${escapeHtml(product.location)}</small></div><span class="supplier-chip">${escapeHtml(product.supplier)}</span><span class="need">Order ${formatQuantity(product, product.toOrder)}</span>${statusMarkup(product)}</div>`).join('')
+    ? orders.slice(0, 4).map((product) => `<div class="order-preview-row"><div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)} · ${escapeHtml(product.location)}</small></div><span class="supplier-chip">${escapeHtml(product.supplier.name)}</span><span class="need">Order ${formatQuantity(product, product.toOrder)}</span>${statusMarkup(product)}</div>`).join('')
     : '<div class="order-preview-empty">Everything is above minimum. No orders are waiting.</div>';
 
   const mostUsed = [...state.products]
@@ -207,7 +432,7 @@ function renderDashboard() {
     .slice(0, 4);
   const maximum = mostUsed[0]?.used || 1;
   $('#top-usage').innerHTML = mostUsed.length
-    ? mostUsed.map((product, index) => `<div class="usage-row"><span class="usage-rank">0${index + 1}</span><div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.supplier)}</small></div><div class="micro-bar"><span style="width:${Math.max(8, product.used / maximum * 100)}%"></span></div><span class="usage-number">${formatQuantity(product, product.used)}</span></div>`).join('')
+    ? mostUsed.map((product, index) => `<div class="usage-row"><span class="usage-rank">0${index + 1}</span><div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(supplierName(product))}</small></div><div class="micro-bar"><span style="width:${Math.max(8, product.used / maximum * 100)}%"></span></div><span class="usage-number">${formatQuantity(product, product.used)}</span></div>`).join('')
     : '<div class="order-preview-empty">Stocktakes will build your usage view.</div>';
 
   $('#days-since-stocktake').textContent = fullDays;
@@ -235,9 +460,9 @@ function renderDashboard() {
 function filteredProducts() {
   const query = productQuery.trim().toLowerCase();
   return state.products.filter((product) => {
-    const matchesQuery = !query || [product.name, product.sku, product.supplier, product.location].some((value) => String(value).toLowerCase().includes(query));
+    const matchesQuery = !query || [product.name, product.sku, product.supplierId, supplierName(product), product.location].some((value) => String(value).toLowerCase().includes(query));
     const matchesStatus = productStatus === 'all' || productStatusOf(product) === productStatus;
-    const matchesSupplier = productSupplier === 'all' || product.supplier === productSupplier;
+    const matchesSupplier = productSupplier === 'all' || product.supplierId === productSupplier;
     return matchesQuery && matchesStatus && matchesSupplier;
   });
 }
@@ -245,9 +470,8 @@ function filteredProducts() {
 function renderProducts() {
   const activeIds = new Set(state.products.map((product) => product.id));
   selectedProductIds = new Set([...selectedProductIds].filter((id) => activeIds.has(id)));
-  const suppliers = [...new Set(state.products.map((product) => product.supplier))].sort();
   const supplierSelect = $('#product-supplier-filter');
-  supplierSelect.innerHTML = `<option value="all">All suppliers</option>${suppliers.map((supplier) => `<option value="${escapeHtml(supplier)}">${escapeHtml(supplier)}</option>`).join('')}`;
+  supplierSelect.innerHTML = `<option value="all">All suppliers</option>${state.suppliers.slice().sort((a, b) => a.name.localeCompare(b.name)).map((supplier) => `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)} · ${escapeHtml(supplier.id)}</option>`).join('')}`;
   supplierSelect.value = productSupplier;
   const products = filteredProducts();
   const visibleSelected = products.filter((product) => selectedProductIds.has(product.id));
@@ -259,7 +483,7 @@ function renderProducts() {
   selectAll.checked = products.length > 0 && visibleSelected.length === products.length;
   selectAll.indeterminate = visibleSelected.length > 0 && visibleSelected.length < products.length;
   $('#products-table').innerHTML = products.length
-    ? products.map((product) => `<tr><td class="select-cell"><input type="checkbox" data-product-select data-product-id="${product.id}" ${selectedProductIds.has(product.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(product.name)}" /></td><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)}</small></td><td>${escapeHtml(product.supplier)}</td><td><span class="cell-subtitle">${escapeHtml(product.location)}</span></td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td>${formatQuantity(product, product.minimum)}</td><td>${formatQuantity(product, product.par)}</td><td>${statusMarkup(product)}</td><td class="row-actions"><button class="row-action edit-action" data-action="edit-product" data-product-id="${product.id}">Edit</button><button class="row-action delete-action" data-action="confirm-delete-product" data-product-id="${product.id}">Delete</button></td></tr>`).join('')
+    ? products.map((product) => `<tr><td class="select-cell"><input type="checkbox" data-product-select data-product-id="${product.id}" ${selectedProductIds.has(product.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(product.name)}" /></td><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)}</small></td><td>${escapeHtml(supplierName(product))}<small>${escapeHtml(product.supplierId)}</small></td><td><span class="cell-subtitle">${escapeHtml(product.location)}</span></td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td>${formatQuantity(product, product.minimum)}</td><td>${formatQuantity(product, product.par)}</td><td>${statusMarkup(product)}</td><td class="row-actions"><button class="row-action edit-action" data-action="edit-product" data-product-id="${product.id}">Edit</button><button class="row-action delete-action" data-action="confirm-delete-product" data-product-id="${product.id}">Delete</button></td></tr>`).join('')
     : '<tr><td colspan="9"><div class="order-preview-empty">No products match those filters.</div></td></tr>';
   $('#products-footer').textContent = 'Stock levels update whenever a stocktake is completed.';
 }
@@ -273,7 +497,7 @@ function renderStocktakes() {
 
 function renderOrders() {
   const orders = getOrders();
-  const supplierCount = new Set(orders.map((order) => order.supplier)).size;
+  const supplierCount = new Set(orders.map((order) => order.supplier.id)).size;
   const totalUnits = orders.reduce((sum, order) => sum + order.toOrder, 0);
   $('#order-summary').innerHTML = `<div><strong>${orders.length}</strong><span>items below minimum</span></div><div><strong>${supplierCount}</strong><span>suppliers to contact</span></div><div><strong>${formatNumber(totalUnits)}</strong><span>units to return to par</span></div>`;
   if (!orders.length) {
@@ -281,11 +505,24 @@ function renderOrders() {
     return;
   }
   const groups = orders.reduce((map, order) => {
-    map[order.supplier] = map[order.supplier] || [];
-    map[order.supplier].push(order);
+    map[order.supplier.id] = map[order.supplier.id] || { supplier: order.supplier, items: [] };
+    map[order.supplier.id].items.push(order);
     return map;
   }, {});
-  $('#supplier-orders').innerHTML = Object.entries(groups).map(([supplier, items]) => `<section class="supplier-order"><div class="supplier-head"><div><h3>${escapeHtml(supplier)}</h3><p>${items.length} line${items.length === 1 ? '' : 's'} ready to order</p></div><span class="supplier-total">${formatNumber(items.reduce((sum, item) => sum + item.toOrder, 0))} units</span></div>${items.map((item) => `<div class="order-item"><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.sku)} · ${escapeHtml(item.location)}</small></div><span class="order-optional">Have ${formatQuantity(item, item.current)}</span><span class="order-optional">Par ${formatQuantity(item, item.par)}</span><b>Order ${formatQuantity(item, item.toOrder)}</b></div>`).join('')}</section>`).join('');
+  $('#supplier-orders').innerHTML = Object.values(groups)
+    .sort((a, b) => a.supplier.name.localeCompare(b.supplier.name))
+    .map(({ supplier, items }) => `<section class="supplier-order"><div class="supplier-head"><div><h3>${escapeHtml(supplier.name)}</h3><p>${escapeHtml(supplier.id)} · ${items.length} line${items.length === 1 ? '' : 's'} ready to order${supplier.orderDays ? ` · orders ${escapeHtml(supplier.orderDays)}` : ''}</p>${supplier.orderingMethod ? `<small class="supplier-ordering">${escapeHtml(supplier.orderingMethod)}</small>` : ''}</div><span class="supplier-total">${formatNumber(items.reduce((sum, item) => sum + item.toOrder, 0))} units</span></div>${items.map((item) => `<div class="order-item"><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.sku)} · ${escapeHtml(item.location)}</small></div><span class="order-optional">Have ${formatQuantity(item, item.current)}</span><span class="order-optional">Par ${formatQuantity(item, item.par)}</span><b>Order ${formatQuantity(item, item.toOrder)}</b></div>`).join('')}</section>`).join('');
+}
+
+function renderSuppliers() {
+  const suppliers = state.suppliers.slice().sort((a, b) => a.name.localeCompare(b.name));
+  $('#supplier-summary').textContent = `${suppliers.length} supplier${suppliers.length === 1 ? '' : 's'} in your order book`;
+  $('#suppliers-table').innerHTML = suppliers.length
+    ? suppliers.map((supplier) => {
+      const productCount = state.products.filter((product) => product.supplierId === supplier.id).length;
+      return `<tr><td><span class="product-name">${escapeHtml(supplier.name)}</span><small>${escapeHtml(supplier.id)}</small></td><td>${escapeHtml(supplier.orderingMethod || 'Not recorded')}</td><td>${escapeHtml(supplier.orderDays || 'Not recorded')}</td><td>${escapeHtml(supplier.repContact || 'Not recorded')}</td><td class="stock-cell">${productCount}</td><td><span class="cell-subtitle">${escapeHtml(supplier.notes || '—')}</span></td><td class="row-actions"><button class="row-action edit-action" data-action="edit-supplier" data-supplier-id="${escapeHtml(supplier.id)}">Edit</button></td></tr>`;
+    }).join('')
+    : '<tr><td colspan="7"><div class="order-preview-empty">Add a supplier before adding its products.</div></td></tr>';
 }
 
 function renderInsights() {
@@ -311,13 +548,14 @@ function renderInsights() {
     const totalForTrend = product.used || 0;
     const oldHalf = Math.max(0, totalForTrend - firstHalf);
     const trend = firstHalf > oldHalf * 1.15 ? ['up', '↑ Increasing'] : firstHalf < oldHalf * .85 ? ['down', '↓ Easing'] : ['stable', '→ Steady'];
-    return `<tr><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.supplier)}</small></td><td class="stock-cell">${formatQuantity(product, product.current)}</td><td>${formatQuantity(product, usageFor(product.id, 28))}</td><td>${formatQuantity(product, totalForTrend / (days / 7))}</td><td><span class="trend ${trend[0]}">${trend[1]}</span></td><td class="stock-cell">${formatQuantity(product, suggestedPar(product))}</td></tr>`;
+    return `<tr><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(supplierName(product))}</small></td><td class="stock-cell">${formatQuantity(product, product.current)}</td><td>${formatQuantity(product, usageFor(product.id, 28))}</td><td>${formatQuantity(product, totalForTrend / (days / 7))}</td><td><span class="trend ${trend[0]}">${trend[1]}</span></td><td class="stock-cell">${formatQuantity(product, suggestedPar(product))}</td></tr>`;
   }).join('');
 }
 
 function renderAll() {
   renderDashboard();
   renderProducts();
+  renderSuppliers();
   renderStocktakes();
   renderOrders();
   renderInsights();
@@ -328,7 +566,7 @@ function setRoute(route) {
   $$('.view').forEach((view) => view.classList.toggle('active', view.dataset.view === route));
   $$('.nav-item').forEach((item) => item.classList.toggle('active', item.dataset.route === route));
   const labels = {
-    dashboard: ['STOCKTAKE', 'Good morning, Josie.'], products: ['INVENTORY', 'Product library'], stocktake: ['COUNTING', 'Keep the shelves honest.'], orders: ['PURCHASING', 'Ready to order.'], insights: ['INSIGHTS', 'Learn your rhythm.'],
+    dashboard: ['STOCKTAKE', 'Good morning, Josie.'], products: ['INVENTORY', 'Product library'], suppliers: ['SUPPLIERS', 'Your ordering contacts.'], stocktake: ['COUNTING', 'Keep the shelves honest.'], orders: ['PURCHASING', 'Ready to order.'], insights: ['INSIGHTS', 'Learn your rhythm.'],
   };
   $('#page-eyebrow').textContent = labels[route][0];
   $('#page-title').textContent = labels[route][1];
@@ -336,12 +574,16 @@ function setRoute(route) {
 }
 
 function productForm(product) {
-  const item = product || { name: '', sku: nextSku(), supplier: '', par: '', minimum: '', current: '', location: '', unit: '' };
+  if (!state.suppliers.length) {
+    setRoute('suppliers');
+    return toast('Add a supplier before adding products.');
+  }
+  const item = product || { name: '', sku: nextSku(), supplierId: state.suppliers[0].id, par: '', minimum: '', current: '', location: '', unit: '' };
   modal(product ? 'Edit product' : 'Add product', product ? 'Update its stock settings or location.' : 'Create a product line. A SKU is assigned automatically.', `
     <form id="product-form" class="form-grid">
       <div class="field full"><label for="product-name">Product name</label><input id="product-name" name="name" value="${escapeHtml(item.name)}" required maxlength="90" placeholder="e.g. House blend coffee" /></div>
       <div class="field"><label for="product-sku">Product SKU</label><input id="product-sku" name="sku" value="${escapeHtml(item.sku)}" required maxlength="32" /><p class="input-note">Auto-generated; you can replace it if needed.</p></div>
-      <div class="field"><label for="product-supplier">Supplier</label><input id="product-supplier" name="supplier" value="${escapeHtml(item.supplier)}" required maxlength="80" placeholder="e.g. BioPak" /></div>
+      <div class="field"><label for="product-supplier">Supplier</label><select id="product-supplier" name="supplierId" required>${state.suppliers.slice().sort((a, b) => a.name.localeCompare(b.name)).map((supplier) => `<option value="${escapeHtml(supplier.id)}" ${supplier.id === item.supplierId ? 'selected' : ''}>${escapeHtml(supplier.name)} · ${escapeHtml(supplier.id)}</option>`).join('')}</select><p class="input-note">Suppliers are managed in the supplier book.</p></div>
       <div class="field"><label for="product-par">Par level</label><input id="product-par" name="par" value="${item.par}" type="number" min="0" step="0.1" required /></div>
       <div class="field"><label for="product-minimum">Minimum level</label><input id="product-minimum" name="minimum" value="${item.minimum}" type="number" min="0" step="0.1" required /></div>
       <div class="field"><label for="product-current">Current stock</label><input id="product-current" name="current" value="${item.current}" type="number" min="0" step="0.1" required /></div>
@@ -356,13 +598,44 @@ function productForm(product) {
     const duplicate = state.products.find((candidate) => candidate.sku.toUpperCase() === sku && candidate.id !== product?.id);
     if (duplicate) return toast(`SKU ${sku} is already in use.`);
     const values = {
-      name: String(form.get('name')).trim(), sku, supplier: String(form.get('supplier')).trim(), location: String(form.get('location')).trim(), unit: String(form.get('unit')).trim(),
+      name: String(form.get('name')).trim(), sku, supplierId: String(form.get('supplierId')).trim(), location: String(form.get('location')).trim(), unit: String(form.get('unit')).trim(),
       par: cleanNumber(form.get('par')), minimum: cleanNumber(form.get('minimum')), current: cleanNumber(form.get('current')),
     };
     if (values.minimum > values.par) return toast('Minimum level should not be higher than par level.');
     if (product) Object.assign(product, values);
     else state.products.push({ id: `p-${Date.now().toString(36)}`, ...values });
     persist(); renderAll(); closeModal(); toast(product ? 'Product updated.' : 'Product added to stockroom.');
+  });
+}
+
+function supplierForm(supplier) {
+  const item = supplier || { id: '', name: '', orderingMethod: '', orderDays: '', repContact: '', notes: '' };
+  modal(supplier ? 'Edit supplier' : 'Add supplier', supplier ? 'Update ordering and delivery details.' : 'Supplier IDs link products, bulk uploads and orders.', `
+    <form id="supplier-form" class="form-grid">
+      <div class="field"><label for="supplier-id">Supplier ID</label><input id="supplier-id" name="id" value="${escapeHtml(item.id)}" required maxlength="32" ${supplier ? 'readonly' : ''} placeholder="e.g. BIOPAK" /><p class="input-note">Use this ID in product bulk uploads.</p></div>
+      <div class="field"><label for="supplier-name">Supplier name</label><input id="supplier-name" name="name" value="${escapeHtml(item.name)}" required maxlength="80" placeholder="e.g. BioPak" /></div>
+      <div class="field full"><label for="supplier-ordering-method">How ordering takes place</label><input id="supplier-ordering-method" name="orderingMethod" value="${escapeHtml(item.orderingMethod)}" maxlength="160" placeholder="e.g. Email: hello@email.com, Order through Ordermentum" /></div>
+      <div class="field"><label for="supplier-order-days">Days ordered</label><input id="supplier-order-days" name="orderDays" value="${escapeHtml(item.orderDays)}" maxlength="80" placeholder="e.g. M, TH or M, T, W, TH, F" /><p class="input-note">Use M for Monday and TH for Thursday.</p></div>
+      <div class="field"><label for="supplier-rep-contact">Delivery issue contact</label><input id="supplier-rep-contact" name="repContact" value="${escapeHtml(item.repContact)}" maxlength="160" placeholder="Name · phone · email" /></div>
+      <div class="field full"><label for="supplier-notes">Notes</label><textarea id="supplier-notes" name="notes" rows="3" maxlength="500" placeholder="Anything staff should know before ordering or receiving a delivery.">${escapeHtml(item.notes)}</textarea></div>
+    </form>
+  `, `<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" form="supplier-form" type="submit">${supplier ? 'Save changes' : 'Add supplier'}</button>`);
+  $('#supplier-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const id = supplier ? supplier.id : supplierCode(form.get('id'));
+    if (!supplier && state.suppliers.some((candidate) => candidate.id === id)) return toast(`Supplier ID ${id} is already in use.`);
+    const values = {
+      id,
+      name: String(form.get('name')).trim(),
+      orderingMethod: String(form.get('orderingMethod')).trim(),
+      orderDays: String(form.get('orderDays')).trim(),
+      repContact: String(form.get('repContact')).trim(),
+      notes: String(form.get('notes')).trim(),
+    };
+    if (supplier) Object.assign(supplier, values);
+    else state.suppliers.push(values);
+    persist(); renderAll(); closeModal(); toast(supplier ? 'Supplier updated.' : 'Supplier added to the order book.');
   });
 }
 
@@ -383,8 +656,9 @@ function confirmDeleteProducts(productIds) {
 }
 
 function startStocktake(type = 'full', group = '') {
-  const eligible = state.products.filter((product) => type === 'full' || (type === 'low' ? isLowUse(product) : type === 'supplier' ? product.supplier === group : product.location === group));
-  const labels = { full: 'Full stocktake', low: 'Low-use item stocktake', supplier: `${group} stocktake`, section: `${group} stocktake` };
+  const supplier = supplierById(group);
+  const eligible = state.products.filter((product) => type === 'full' || (type === 'low' ? isLowUse(product) : type === 'supplier' ? product.supplierId === group : product.location === group));
+  const labels = { full: 'Full stocktake', low: 'Low-use item stocktake', supplier: `${supplier?.name || group} stocktake`, section: `${group} stocktake` };
   modal(labels[type], `${eligible.length} product${eligible.length === 1 ? '' : 's'} to count. Leave a field unchanged to keep the recorded level.`, `
     <div class="count-summary"><strong>Count today’s stock</strong><span>${eligible.length} lines</span></div>
     <input class="count-search" id="count-search" type="search" placeholder="Find a product to count" />
@@ -410,8 +684,9 @@ function startStocktake(type = 'full', group = '') {
 }
 
 function chooseSupplierTake() {
-  const suppliers = [...new Set(state.products.map((product) => product.supplier))].sort();
-  modal('Stocktake by supplier', 'Choose the delivery group you want to count.', `<div class="field"><label for="take-supplier">Supplier</label><select id="take-supplier">${suppliers.map((supplier) => `<option value="${escapeHtml(supplier)}">${escapeHtml(supplier)}</option>`).join('')}</select></div>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" id="continue-supplier-take">Continue</button>');
+  const suppliers = state.suppliers.filter((supplier) => state.products.some((product) => product.supplierId === supplier.id)).sort((a, b) => a.name.localeCompare(b.name));
+  if (!suppliers.length) return toast('Add products to a supplier before starting this stocktake.');
+  modal('Stocktake by supplier', 'Choose the delivery group you want to count.', `<div class="field"><label for="take-supplier">Supplier</label><select id="take-supplier">${suppliers.map((supplier) => `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)} · ${escapeHtml(supplier.id)}</option>`).join('')}</select></div>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" id="continue-supplier-take">Continue</button>');
   $('#continue-supplier-take').addEventListener('click', () => startStocktake('supplier', $('#take-supplier').value));
 }
 
@@ -425,7 +700,8 @@ function toRows(products) {
   return products.map((product) => ({
     'Product name': product.name,
     'Product SKU': product.sku,
-    Supplier: product.supplier,
+    'Supplier ID': product.supplierId,
+    'Supplier name': supplierName(product),
     'Par level': product.par,
     'Minimum level': product.minimum,
     'Current stock': product.current,
@@ -452,7 +728,7 @@ function downloadSheet(rows, sheetName, filename) {
 }
 
 function downloadTemplate() {
-  downloadSheet([{ 'Product name': 'Example product', 'Product SKU': '', Supplier: 'Example supplier', 'Par level': 24, 'Minimum level': 8, 'Current stock': 12, Location: 'Dry store · A1', Unit: 'unit' }], 'Products', 'Josie_Coffee_Product_Import_Template.xlsx');
+  downloadSheet([{ 'Product name': 'Example product', 'Product SKU': '', 'Supplier ID': 'BIOPAK', 'Par level': 24, 'Minimum level': 8, 'Current stock': 12, Location: 'Dry store · A1', Unit: 'unit' }], 'Products', 'Josie_Coffee_Product_Import_Template.xlsx');
 }
 
 function downloadProducts() {
@@ -460,13 +736,13 @@ function downloadProducts() {
 }
 
 function downloadOrders() {
-  const rows = getOrders().map((product) => ({ Supplier: product.supplier, 'Product name': product.name, SKU: product.sku, 'Current stock': product.current, 'Minimum level': product.minimum, 'Par level': product.par, 'Order quantity': product.toOrder, Unit: product.unit, Location: product.location }));
+  const rows = getOrders().map((product) => ({ 'Supplier ID': product.supplier.id, Supplier: product.supplier.name, 'Ordering method': product.supplier.orderingMethod, 'Order days': product.supplier.orderDays, 'Delivery contact': product.supplier.repContact, 'Product name': product.name, SKU: product.sku, 'Current stock': product.current, 'Minimum level': product.minimum, 'Par level': product.par, 'Order quantity': product.toOrder, Unit: product.unit, Location: product.location }));
   if (!rows.length) return toast('There are no products below minimum to download.');
   downloadSheet(rows, 'Order list', `Josie_Coffee_Order_List_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 function downloadUsage() {
-  const rows = state.products.map((product) => ({ 'Product name': product.name, SKU: product.sku, Supplier: product.supplier, '4-week usage': usageFor(product.id, 28), '12-week usage': usageFor(product.id, 84), 'Suggested par': suggestedPar(product), 'Current par': product.par, Unit: product.unit }));
+  const rows = state.products.map((product) => ({ 'Product name': product.name, SKU: product.sku, 'Supplier ID': product.supplierId, Supplier: supplierName(product), '4-week usage': usageFor(product.id, 28), '12-week usage': usageFor(product.id, 84), 'Suggested par': suggestedPar(product), 'Current par': product.par, Unit: product.unit }));
   downloadSheet(rows, 'Usage insights', `Josie_Coffee_Usage_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
@@ -482,15 +758,23 @@ function valueAt(row, keys) {
 
 function importRows(rows) {
   let added = 0; let updated = 0; let skipped = 0;
+  const unknownSupplierIds = new Set();
   rows.forEach((row) => {
     const name = String(valueAt(row, ['Product name', 'Product', 'Name'])).trim();
     if (!name) { skipped += 1; return; }
     const skuInput = String(valueAt(row, ['Product SKU', 'SKU'])).trim().toUpperCase();
     const existing = state.products.find((product) => product.sku.toUpperCase() === skuInput && skuInput);
+    const supplierInput = String(valueAt(row, ['Supplier ID', 'Supplier'])).trim();
+    const supplier = state.suppliers.find((candidate) => candidate.id === supplierCode(supplierInput) || candidate.name.toLowerCase() === supplierInput.toLowerCase());
+    if (!supplier) {
+      unknownSupplierIds.add(supplierInput || 'blank supplier ID');
+      skipped += 1;
+      return;
+    }
     const product = {
       name,
       sku: skuInput || (existing?.sku || nextSku()),
-      supplier: String(valueAt(row, ['Supplier'])).trim() || 'Unassigned supplier',
+      supplierId: supplier.id,
       par: cleanNumber(valueAt(row, ['Par level', 'Par'])),
       minimum: cleanNumber(valueAt(row, ['Minimum level', 'Minimum', 'Min level'])),
       current: cleanNumber(valueAt(row, ['Current stock', 'Current', 'Stock'])),
@@ -501,10 +785,53 @@ function importRows(rows) {
     else { state.products.push({ id: `p-${Date.now().toString(36)}-${added}`, ...product }); added += 1; }
   });
   persist(); renderAll();
-  modal('Upload complete', 'Your stockroom has been updated.', `<div class="upload-result"><strong>${added} added · ${updated} updated</strong><br />${skipped ? `${skipped} blank row${skipped === 1 ? '' : 's'} skipped.` : 'Every populated row was imported.'}</div><p class="modal-intro" style="margin-top:16px">Imported SKUs update existing products; blank SKUs are generated automatically.</p>`, '<button class="button primary" data-action="close-modal">Done</button>');
+  const supplierNote = unknownSupplierIds.size ? `<br />Skipped rows with unknown supplier IDs: ${escapeHtml([...unknownSupplierIds].join(', '))}. Add those suppliers first, then upload again.` : '';
+  modal('Upload complete', 'Your stockroom has been updated.', `<div class="upload-result"><strong>${added} added · ${updated} updated</strong><br />${skipped ? `${skipped} row${skipped === 1 ? '' : 's'} skipped.` : 'Every populated row was imported.'}${supplierNote}</div><p class="modal-intro" style="margin-top:16px">Use <b>Supplier ID</b> in product sheets. Imported SKUs update existing products; blank SKUs are generated automatically.</p>`, '<button class="button primary" data-action="close-modal">Done</button>');
 }
 
-function handleUpload(file) {
+function importSuppliers(rows) {
+  let added = 0; let updated = 0; let skipped = 0;
+  rows.forEach((row) => {
+    const name = String(valueAt(row, ['Supplier name', 'Supplier', 'Name'])).trim();
+    if (!name) { skipped += 1; return; }
+    const suppliedId = String(valueAt(row, ['Supplier ID', 'ID'])).trim();
+    const id = supplierCode(suppliedId || name);
+    const existing = state.suppliers.find((supplier) => supplier.id === id);
+    const values = {
+      id,
+      name,
+      orderingMethod: String(valueAt(row, ['How ordering takes place', 'Ordering method', 'Order method'])).trim(),
+      orderDays: String(valueAt(row, ['Days ordered', 'Order days'])).trim(),
+      repContact: String(valueAt(row, ['Rep contact and details for delivery issues', 'Rep contact', 'Delivery contact'])).trim(),
+      notes: String(valueAt(row, ['Notes'])).trim(),
+    };
+    if (existing) { Object.assign(existing, values); updated += 1; }
+    else { state.suppliers.push(values); added += 1; }
+  });
+  persist(); renderAll();
+  modal('Supplier upload complete', 'Your supplier book has been updated.', `<div class="upload-result"><strong>${added} added · ${updated} updated</strong><br />${skipped ? `${skipped} blank row${skipped === 1 ? '' : 's'} skipped.` : 'Every populated row was imported.'}</div><p class="modal-intro" style="margin-top:16px">Supplier IDs are stable references for product uploads and order lists.</p>`, '<button class="button primary" data-action="close-modal">Done</button>');
+}
+
+function toSupplierRows() {
+  return state.suppliers.map((supplier) => ({
+    'Supplier name': supplier.name,
+    'Supplier ID': supplier.id,
+    'How ordering takes place': supplier.orderingMethod,
+    'Days ordered': supplier.orderDays,
+    'Rep contact and details for delivery issues': supplier.repContact,
+    Notes: supplier.notes,
+  }));
+}
+
+function downloadSupplierTemplate() {
+  downloadSheet([{ 'Supplier name': 'Example supplier', 'Supplier ID': 'EXAMPLE-SUPPLIER', 'How ordering takes place': 'Email: hello@example.com', 'Days ordered': 'M, TH', 'Rep contact and details for delivery issues': 'Alex · 0400 000 000 · delivery@example.com', Notes: 'Example delivery note' }], 'Suppliers', 'Josie_Coffee_Supplier_Import_Template.xlsx');
+}
+
+function downloadSuppliers() {
+  downloadSheet(toSupplierRows(), 'Suppliers', `Josie_Coffee_Suppliers_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+function readSpreadsheet(file, onRows, message) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = (event) => {
@@ -520,8 +847,8 @@ function handleUpload(file) {
         const headings = header.split(',').map((value) => value.replace(/^"|"$/g, '').trim());
         rows = lines.map((line) => Object.fromEntries(line.split(',').map((value, index) => [headings[index], value.replace(/^"|"$/g, '').trim()])));
       }
-      if (!rows.length) return toast('That sheet does not contain any product rows.');
-      importRows(rows);
+      if (!rows.length) return toast(message);
+      onRows(rows);
     } catch (error) {
       toast('We could not read that sheet. Try the supplied template.');
     }
@@ -529,8 +856,16 @@ function handleUpload(file) {
   reader.readAsArrayBuffer(file);
 }
 
+function handleUpload(file) {
+  readSpreadsheet(file, importRows, 'That sheet does not contain any product rows.');
+}
+
+function handleSupplierUpload(file) {
+  readSpreadsheet(file, importSuppliers, 'That sheet does not contain any supplier rows.');
+}
+
 function showHelp() {
-  modal('A quick guide', 'Everything in this first version is stored in this browser.', `<ul class="help-list"><li><b>Products</b> are stored with auto-generated SKUs, suppliers, locations and stock rules.</li><li><b>Stocktakes</b> update stock levels. When a level falls, the difference is saved as usage data.</li><li><b>Order list</b> groups only below-minimum products by supplier and calculates the quantity needed to reach par.</li><li><b>Insights</b> keeps using the history in this browser to make par-level suggestions over time.</li></ul>`, '<button class="button primary" data-action="close-modal">Got it</button>');
+  modal('A quick guide', 'Your stockroom is built for the full café rhythm.', `<ul class="help-list"><li><b>Suppliers</b> are their own records. Give each one a stable ID, order instructions, preferred days and delivery contacts.</li><li><b>Products</b> link to a supplier ID, so spreadsheet imports only need that short code.</li><li><b>Stocktakes</b> update stock levels. When a level falls, the difference is saved as usage data.</li><li><b>Online storage</b> follows CoffeeCalc’s model: a shared database when deployed, plus this browser as an offline cache.</li></ul>`, '<button class="button primary" data-action="close-modal">Got it</button>');
 }
 
 document.addEventListener('click', (event) => {
@@ -539,10 +874,13 @@ document.addEventListener('click', (event) => {
   const action = event.target.closest('[data-action]');
   if (!action) return;
   const product = state.products.find((item) => item.id === action.dataset.productId);
+  const supplier = supplierById(action.dataset.supplierId);
   const actions = {
     'close-modal': closeModal,
     'open-product-form': () => productForm(),
     'edit-product': () => productForm(product),
+    'open-supplier-form': () => supplierForm(),
+    'edit-supplier': () => supplierForm(supplier),
     'confirm-delete-product': () => confirmDeleteProducts(product ? [product.id] : []),
     'confirm-delete-selected': () => confirmDeleteProducts([...selectedProductIds]),
     'start-stocktake': () => startStocktake(action.dataset.takeType || 'full'),
@@ -550,10 +888,14 @@ document.addEventListener('click', (event) => {
     'choose-supplier-take': chooseSupplierTake,
     'download-template': downloadTemplate,
     'download-products': downloadProducts,
+    'download-supplier-template': downloadSupplierTemplate,
+    'download-suppliers': downloadSuppliers,
     'download-orders': downloadOrders,
     'download-usage': downloadUsage,
     'print-orders': () => window.print(),
     'show-help': showHelp,
+    'show-account': showAccount,
+    'sign-out': signOut,
     'show-notifications': () => toast(getOrders().length ? `${getOrders().length} products need an order today.` : 'No stock alerts right now.'),
   };
   actions[action.dataset.action]?.();
@@ -578,7 +920,9 @@ document.addEventListener('change', (event) => {
 });
 $('#insight-range').addEventListener('change', renderInsights);
 $('#bulk-upload').addEventListener('change', (event) => { handleUpload(event.target.files[0]); event.target.value = ''; });
+$('#supplier-upload').addEventListener('change', (event) => { handleSupplierUpload(event.target.files[0]); event.target.value = ''; });
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && $('#modal-layer').classList.contains('open')) closeModal(); });
 
 renderAll();
 setRoute(activeRoute);
+void initialiseOnlineState();

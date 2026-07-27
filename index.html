@@ -23,6 +23,7 @@
         <nav class="main-nav" aria-label="Main navigation">
           <button class="nav-item active" data-route="dashboard"><span class="nav-icon">⌂</span>Overview</button>
           <button class="nav-item" data-route="products"><span class="nav-icon">▦</span>Products <span class="nav-count" id="product-count">0</span></button>
+          <button class="nav-item" data-route="suppliers"><span class="nav-icon">⌁</span>Suppliers</button>
           <button class="nav-item" data-route="stocktake"><span class="nav-icon">✓</span>Stocktake</button>
           <button class="nav-item" data-route="orders"><span class="nav-icon">↗</span>Order list <span class="nav-count warning" id="order-count">0</span></button>
           <button class="nav-item" data-route="insights"><span class="nav-icon">◔</span>Usage insights</button>
@@ -38,9 +39,10 @@
         <header class="topbar">
           <div class="crumb"><span id="page-eyebrow">STOCKTAKE</span><h1 id="page-title">Good morning, Josie.</h1></div>
           <div class="topbar-actions">
+            <span class="save-status" id="save-status" data-state="connecting"><i aria-hidden="true"></i><span id="save-status-text">Connecting online…</span></span>
             <span class="today" id="today-label"></span>
             <button class="icon-button" data-action="show-notifications" aria-label="Notifications"><span>♧</span><i></i></button>
-            <button class="avatar" data-action="show-help" aria-label="Open account menu">JG</button>
+            <button class="avatar" id="account-button" data-action="show-account" aria-label="Account">JG</button>
           </div>
         </header>
 
@@ -81,6 +83,12 @@
           <div class="panel table-panel"><div class="table-wrap"><table><thead><tr><th class="select-cell"><input id="select-all-products" type="checkbox" aria-label="Select all visible products" /></th><th>Product</th><th>Supplier</th><th>Location</th><th>Current stock</th><th>Minimum</th><th>Par level</th><th>Status</th><th></th></tr></thead><tbody id="products-table"></tbody></table></div><div class="table-footer" id="products-footer"></div></div>
         </section>
 
+        <section id="suppliers" class="view" data-view="suppliers">
+          <div class="view-header"><div><p class="kicker">ORDER BOOK</p><h2>Suppliers</h2><p class="muted">Order instructions and delivery contacts, kept with the supplier record.</p></div><div class="view-actions"><button class="button secondary" data-action="download-supplier-template">Download template</button><label class="button secondary file-label">Upload sheet<input id="supplier-upload" type="file" accept=".xlsx,.xls,.csv" hidden /></label><button class="button primary" data-action="open-supplier-form"><span>+</span> Add supplier</button></div></div>
+          <div class="toolbar"><span class="toolbar-summary" id="supplier-summary"></span><button class="text-button export-button" data-action="download-suppliers">Export <span>↓</span></button></div>
+          <div class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Supplier</th><th>How to order</th><th>Order days</th><th>Delivery issue contact</th><th>Products</th><th>Notes</th><th></th></tr></thead><tbody id="suppliers-table"></tbody></table></div><div class="table-footer">Supplier ID is the reference used by product uploads and order reports.</div></div>
+        </section>
+
         <section id="stocktake" class="view" data-view="stocktake">
           <div class="view-header"><div><p class="kicker">COUNT WITH CONFIDENCE</p><h2>Stocktake</h2><p class="muted">Count what matters today. We’ll capture the rest.</p></div><button class="button primary" data-action="start-stocktake"><span>+</span> New stocktake</button></div>
           <div class="stocktake-options">
@@ -109,6 +117,9 @@
 
     <div class="modal-layer" id="modal-layer" aria-hidden="true">
       <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"></div>
+    </div>
+    <div class="account-layer" id="account-layer" hidden>
+      <section class="account-card" id="account-card" aria-live="polite"></section>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </body>

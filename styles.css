@@ -86,3 +86,11 @@ button { cursor: pointer; }
 .button.destructive { color: #fff; background: var(--rose); border-color: var(--rose); }
 .button.destructive:hover { background: #991b1b; border-color: #991b1b; }
 .button.compact { min-height: 31px; padding: 0 10px; font-size: 11px; }
+.save-status { display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:10px; padding-right:14px; border-right:1px solid var(--line); white-space:nowrap; }
+.save-status i { width:7px; height:7px; border-radius:50%; background:#94a3b8; }
+.save-status[data-state="online"] i { background:var(--sage); }.save-status[data-state="saving"] i,.save-status[data-state="connecting"] i { background:#d97706; }.save-status[data-state="offline"] i { background:var(--rose); }
+.supplier-ordering { display:block; margin-top:5px; font-size:10px; color:var(--caramel); }
+.field textarea { border:1px solid var(--line); border-radius:8px; outline:0; padding:10px 11px; color:var(--ink); background:#fff; font:12px inherit; resize:vertical; }.field textarea:focus { border-color:var(--caramel); box-shadow:0 0 0 3px rgb(37 99 235 / 12%); }
+@media (max-width: 680px) { .save-status { display:none; } }
+.account-layer { position:fixed; inset:0; z-index:40; display:grid; place-items:center; padding:22px; background:rgb(15 23 42 / 62%); }
+.account-layer[hidden] { display:none; }.account-card { width:min(430px, 100%); background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 28px 80px rgb(15 23 42 / 35%); padding:28px; }.account-card h2 { margin:0 0 7px; font-size:24px; letter-spacing:-.04em; }.account-card p { color:var(--muted); margin:0 0 20px; font-size:12px; line-height:1.55; }.account-card .form-grid { margin-top:18px; }.account-error { color:var(--rose)!important; background:var(--rose-pale); border-radius:7px; padding:9px 10px; margin-bottom:14px!important; }.account-card .button { width:100%; margin-top:4px; }.account-actions { display:flex; gap:8px; }.account-actions .button { width:auto; flex:1; }
