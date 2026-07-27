@@ -4,15 +4,15 @@ const SYNC_PENDING_KEY = 'josieCoffeeStockroom.sync-pending';
 const DAY = 24 * 60 * 60 * 1000;
 
 const seedSuppliers = [
-  { id: 'MINOR-FIGURES', name: 'Minor Figures', orderingMethod: 'Order through Ordermentum', orderDays: 'M, TH', repContact: 'Orders team · orders@minorfigures.com', notes: 'Confirm oat milk availability before long weekends.' },
-  { id: 'DAIRY-FARMERS', name: 'Dairy Farmers', orderingMethod: 'Email: orders@dairyfarmers.com.au', orderDays: 'M, W, F', repContact: 'Dairy delivery desk · 1800 000 000', notes: 'Morning delivery preferred.' },
-  { id: 'SAMPLE-COFFEE', name: 'Sample Coffee', orderingMethod: 'Email: hello@samplecoffee.com.au', orderDays: 'M', repContact: 'Roastery support · hello@samplecoffee.com.au', notes: 'Order coffee by Monday for Thursday delivery.' },
-  { id: 'COFFEE-SUPREME', name: 'Coffee Supreme', orderingMethod: 'Email: orders@coffeesupreme.com', orderDays: 'TH', repContact: 'Customer service · orders@coffeesupreme.com', notes: '' },
-  { id: 'BIOPAK', name: 'BioPak', orderingMethod: 'Order through Ordermentum', orderDays: 'M, TH', repContact: 'Account support · support@biopak.com.au', notes: 'Bundle cups, lids and napkins into one order.' },
-  { id: 'COCA-COLA', name: 'Coca-Cola Europacific', orderingMethod: 'Rep order form', orderDays: 'TH', repContact: 'Beverage rep · deliveryissues@ccep.com', notes: '' },
-  { id: 'ESSENTIAL-INGREDIENT', name: 'Essential Ingredient', orderingMethod: 'Email: orders@essentialingredient.com.au', orderDays: 'TH', repContact: 'Wholesale desk · 02 0000 0000', notes: '' },
-  { id: 'MONIN', name: 'Monin', orderingMethod: 'Order through Ordermentum', orderDays: 'M', repContact: 'Hospitality support · orders@monin.com.au', notes: '' },
-  { id: 'ARKADIA', name: 'Arkadia', orderingMethod: 'Email: orders@arkadia.com.au', orderDays: 'M, TH', repContact: 'Customer care · 1300 000 000', notes: '' },
+  { id: 'MINOR-FIGURES', name: 'Minor Figures', orderingMethod: '', orderDays: '', repContact: '', notes: '' },
+  { id: 'DAIRY-FARMERS', name: 'Dairy Farmers', orderingMethod: '', orderDays: '', repContact: '', notes: '' },
+  { id: 'SAMPLE-COFFEE', name: 'Sample Coffee', orderingMethod: '', orderDays: '', repContact: '', notes: '' },
+  { id: 'COFFEE-SUPREME', name: 'Coffee Supreme', orderingMethod: '', orderDays: '', repContact: '', notes: '' },
+  { id: 'BIOPAK', name: 'BioPak', orderingMethod: '', orderDays: '', repContact: '', notes: '' },
+  { id: 'COCA-COLA', name: 'Coca-Cola Europacific', orderingMethod: '', orderDays: '', repContact: '', notes: '' },
+  { id: 'ESSENTIAL-INGREDIENT', name: 'Essential Ingredient', orderingMethod: '', orderDays: '', repContact: '', notes: '' },
+  { id: 'MONIN', name: 'Monin', orderingMethod: '', orderDays: '', repContact: '', notes: '' },
+  { id: 'ARKADIA', name: 'Arkadia', orderingMethod: '', orderDays: '', repContact: '', notes: '' },
 ];
 
 const seedProducts = [
