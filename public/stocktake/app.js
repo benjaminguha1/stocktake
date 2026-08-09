@@ -1,6 +1,15 @@
-const STORE_KEY = 'josieCoffeeStockroom.v2';
-const LEGACY_STORE_KEY = 'josieCoffeeStockroom.v1';
-const SYNC_PENDING_KEY = 'josieCoffeeStockroom.sync-pending';
+import {
+  createInitialState,
+  exportState,
+  hasStoredState,
+  importState,
+  isStateSyncPending,
+  loadState,
+  markStateSynced,
+  saveState,
+  supplierCode,
+} from './storage.js';
+
 const DAY = 24 * 60 * 60 * 1000;
 
 const seedSuppliers = [
@@ -47,7 +56,7 @@ function seedUsage() {
   );
 }
 
-function makeInitialState() {
+function makeDemoState() {
   return {
     suppliers: seedSuppliers.map((supplier) => ({ ...supplier })),
     products: seedProducts.map((product) => ({ ...product })),
@@ -59,81 +68,8 @@ function makeInitialState() {
   };
 }
 
-function supplierCode(value) {
-  return String(value || 'SUPPLIER')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 32) || 'SUPPLIER';
-}
-
-function uniqueSupplierId(value, usedIds) {
-  const base = supplierCode(value);
-  let id = base;
-  let index = 2;
-  while (usedIds.has(id)) { id = `${base}-${index}`; index += 1; }
-  usedIds.add(id);
-  return id;
-}
-
-function normaliseState(value) {
-  if (!value || !Array.isArray(value.products)) return makeInitialState();
-  const suppliers = [];
-  const usedIds = new Set();
-  const addSupplier = (candidate = {}) => {
-    const name = String(candidate.name || candidate.supplier || candidate.id || 'Unassigned supplier').trim() || 'Unassigned supplier';
-    const requestedId = supplierCode(candidate.id || name);
-    const existing = suppliers.find((supplier) => supplier.id === requestedId || supplier.name.toLowerCase() === name.toLowerCase());
-    if (existing) return existing;
-    const supplier = {
-      id: uniqueSupplierId(requestedId, usedIds),
-      name,
-      orderingMethod: String(candidate.orderingMethod || candidate.orderMethod || '').trim(),
-      orderDays: String(candidate.orderDays || '').trim(),
-      repContact: String(candidate.repContact || '').trim(),
-      notes: String(candidate.notes || '').trim(),
-    };
-    suppliers.push(supplier);
-    return supplier;
-  };
-
-  (Array.isArray(value.suppliers) ? value.suppliers : []).forEach(addSupplier);
-  const products = value.products.map((product, index) => {
-    const supplied = String(product.supplierId || product.supplier || '').trim();
-    const supplier = suppliers.find((item) => item.id === supplierCode(supplied) || item.name.toLowerCase() === supplied.toLowerCase())
-      || addSupplier({ id: supplied || `SUPPLIER-${index + 1}`, name: product.supplier || supplied || 'Unassigned supplier' });
-    return {
-      id: String(product.id || `p-import-${index + 1}`),
-      name: String(product.name || 'Untitled product').trim(),
-      sku: String(product.sku || `JC-IMPORT-${index + 1}`).trim().toUpperCase(),
-      supplierId: supplier.id,
-      par: cleanNumber(product.par),
-      minimum: cleanNumber(product.minimum),
-      current: cleanNumber(product.current),
-      location: String(product.location || 'Unassigned location').trim(),
-      unit: String(product.unit || 'unit').trim(),
-    };
-  });
-  return {
-    suppliers,
-    products,
-    usageRecords: Array.isArray(value.usageRecords) ? value.usageRecords : [],
-    stocktakes: Array.isArray(value.stocktakes) ? value.stocktakes : [],
-  };
-}
-
-function loadState() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || localStorage.getItem(LEGACY_STORE_KEY));
-    if (saved?.products?.length) return normaliseState(saved);
-  } catch (_) {
-    // A fresh, working data set is safer than a broken local cache.
-  }
-  return makeInitialState();
-}
-
-let state = loadState();
+const startedWithStoredState = hasStoredState();
+let state = startedWithStoredState ? loadState() : makeDemoState();
 let activeRoute = 'dashboard';
 let productQuery = '';
 let productStatus = 'all';
@@ -146,12 +82,6 @@ let onlineUser = null;
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
-function saveLocal({ synced = false } = {}) {
-  localStorage.setItem(STORE_KEY, JSON.stringify(state));
-  if (synced) localStorage.removeItem(SYNC_PENDING_KEY);
-  else localStorage.setItem(SYNC_PENDING_KEY, new Date().toISOString());
-}
-
 function setSaveStatus(stateName, message) {
   const status = $('#save-status');
   if (!status) return;
@@ -160,7 +90,7 @@ function setSaveStatus(stateName, message) {
 }
 
 function persist() {
-  saveLocal();
+  saveState(state);
   if (onlineStorageAvailable) void queueOnlineSave();
 }
 
@@ -178,8 +108,12 @@ function supplierDetails(product) {
   };
 }
 
+function orderDaysLabel(supplier) {
+  return supplier.orderDays || 'Any day';
+}
+
 function publicState() {
-  return JSON.parse(JSON.stringify(normaliseState(state)));
+  return JSON.parse(exportState(state));
 }
 
 function queueOnlineSave() {
@@ -194,7 +128,7 @@ function queueOnlineSave() {
         body: JSON.stringify({ state: snapshot }),
       });
       if (!response.ok) throw new Error('Online save failed.');
-      if (JSON.stringify(publicState()) === JSON.stringify(snapshot)) saveLocal({ synced: true });
+      if (exportState(state) === exportState(snapshot)) markStateSynced();
       setSaveStatus('online', 'Saved online');
     })
     .catch(() => setSaveStatus('offline', 'Saved on this device · offline'));
@@ -223,7 +157,7 @@ async function initialiseOnlineState() {
     onlineUser = auth.user;
     updateAccountButton();
     onlineStorageAvailable = true;
-    if (localStorage.getItem(SYNC_PENDING_KEY)) {
+    if (isStateSyncPending()) {
       await queueOnlineSave();
       return;
     }
@@ -231,12 +165,20 @@ async function initialiseOnlineState() {
     if (!response.ok) throw new Error('Online storage is unavailable.');
     const remote = await response.json();
     if (remote.state) {
-      state = normaliseState(remote.state);
-      saveLocal({ synced: true });
+      state = importState(JSON.stringify(remote.state));
+      saveState(state, window.localStorage, { synced: true });
       renderAll();
       setSaveStatus('online', 'Saved online');
       return;
     }
+
+    // Demo rows are never written into a new shared stockroom. A user's real
+    // browser data still wins when it was marked as awaiting synchronisation.
+    if (!startedWithStoredState) {
+      state = createInitialState();
+      renderAll();
+    }
+    saveState(state);
     await queueOnlineSave();
   } catch (_) {
     onlineStorageAvailable = false;
@@ -511,7 +453,7 @@ function renderOrders() {
   }, {});
   $('#supplier-orders').innerHTML = Object.values(groups)
     .sort((a, b) => a.supplier.name.localeCompare(b.supplier.name))
-    .map(({ supplier, items }) => `<section class="supplier-order"><div class="supplier-head"><div><h3>${escapeHtml(supplier.name)}</h3><p>${escapeHtml(supplier.id)} · ${items.length} line${items.length === 1 ? '' : 's'} ready to order${supplier.orderDays ? ` · orders ${escapeHtml(supplier.orderDays)}` : ''}</p>${supplier.orderingMethod ? `<small class="supplier-ordering">${escapeHtml(supplier.orderingMethod)}</small>` : ''}</div><span class="supplier-total">${formatNumber(items.reduce((sum, item) => sum + item.toOrder, 0))} units</span></div>${items.map((item) => `<div class="order-item"><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.sku)} · ${escapeHtml(item.location)}</small></div><span class="order-optional">Have ${formatQuantity(item, item.current)}</span><span class="order-optional">Par ${formatQuantity(item, item.par)}</span><b>Order ${formatQuantity(item, item.toOrder)}</b></div>`).join('')}</section>`).join('');
+    .map(({ supplier, items }) => `<section class="supplier-order"><div class="supplier-head"><div><h3>${escapeHtml(supplier.name)}</h3><p>${escapeHtml(supplier.id)} · ${items.length} line${items.length === 1 ? '' : 's'} ready to order · orders ${escapeHtml(orderDaysLabel(supplier))}</p>${supplier.orderingMethod ? `<small class="supplier-ordering">${escapeHtml(supplier.orderingMethod)}</small>` : ''}</div><span class="supplier-total">${formatNumber(items.reduce((sum, item) => sum + item.toOrder, 0))} units</span></div>${items.map((item) => `<div class="order-item"><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.sku)} · ${escapeHtml(item.location)}</small></div><span class="order-optional">Have ${formatQuantity(item, item.current)}</span><span class="order-optional">Par ${formatQuantity(item, item.par)}</span><b>Order ${formatQuantity(item, item.toOrder)}</b></div>`).join('')}</section>`).join('');
 }
 
 function renderSuppliers() {
@@ -520,7 +462,7 @@ function renderSuppliers() {
   $('#suppliers-table').innerHTML = suppliers.length
     ? suppliers.map((supplier) => {
       const productCount = state.products.filter((product) => product.supplierId === supplier.id).length;
-      return `<tr><td><span class="product-name">${escapeHtml(supplier.name)}</span><small>${escapeHtml(supplier.id)}</small></td><td>${escapeHtml(supplier.orderingMethod || 'Not recorded')}</td><td>${escapeHtml(supplier.orderDays || 'Not recorded')}</td><td>${escapeHtml(supplier.repContact || 'Not recorded')}</td><td class="stock-cell">${productCount}</td><td><span class="cell-subtitle">${escapeHtml(supplier.notes || '—')}</span></td><td class="row-actions"><button class="row-action edit-action" data-action="edit-supplier" data-supplier-id="${escapeHtml(supplier.id)}">Edit</button></td></tr>`;
+      return `<tr><td><span class="product-name">${escapeHtml(supplier.name)}</span><small>${escapeHtml(supplier.id)}</small></td><td>${escapeHtml(supplier.orderingMethod || 'Not recorded')}</td><td>${escapeHtml(orderDaysLabel(supplier))}</td><td>${escapeHtml(supplier.repContact || 'Not recorded')}</td><td class="stock-cell">${productCount}</td><td><span class="cell-subtitle">${escapeHtml(supplier.notes || '—')}</span></td><td class="row-actions"><button class="row-action edit-action" data-action="edit-supplier" data-supplier-id="${escapeHtml(supplier.id)}">Edit</button></td></tr>`;
     }).join('')
     : '<tr><td colspan="7"><div class="order-preview-empty">Add a supplier before adding its products.</div></td></tr>';
 }
@@ -610,12 +552,12 @@ function productForm(product) {
 
 function supplierForm(supplier) {
   const item = supplier || { id: '', name: '', orderingMethod: '', orderDays: '', repContact: '', notes: '' };
-  modal(supplier ? 'Edit supplier' : 'Add supplier', supplier ? 'Update ordering and delivery details.' : 'Supplier IDs link products, bulk uploads and orders.', `
+  modal(supplier ? 'Edit supplier' : 'Add supplier', supplier ? 'Update the supplier details. Only its code and name are required.' : 'Supplier codes link products, bulk uploads and orders. Only code and name are required.', `
     <form id="supplier-form" class="form-grid">
-      <div class="field"><label for="supplier-id">Supplier ID</label><input id="supplier-id" name="id" value="${escapeHtml(item.id)}" required maxlength="32" ${supplier ? 'readonly' : ''} placeholder="e.g. BIOPAK" /><p class="input-note">Use this ID in product bulk uploads.</p></div>
+      <div class="field"><label for="supplier-id">Supplier code</label><input id="supplier-id" name="id" value="${escapeHtml(item.id)}" required maxlength="32" ${supplier ? 'readonly' : ''} placeholder="e.g. BIOPAK" /><p class="input-note">Required · use this code in product bulk uploads.</p></div>
       <div class="field"><label for="supplier-name">Supplier name</label><input id="supplier-name" name="name" value="${escapeHtml(item.name)}" required maxlength="80" placeholder="e.g. BioPak" /></div>
       <div class="field full"><label for="supplier-ordering-method">How ordering takes place</label><input id="supplier-ordering-method" name="orderingMethod" value="${escapeHtml(item.orderingMethod)}" maxlength="160" placeholder="e.g. Email: hello@email.com, Order through Ordermentum" /></div>
-      <div class="field"><label for="supplier-order-days">Days ordered</label><input id="supplier-order-days" name="orderDays" value="${escapeHtml(item.orderDays)}" maxlength="80" placeholder="e.g. M, TH or M, T, W, TH, F" /><p class="input-note">Use M for Monday and TH for Thursday.</p></div>
+      <div class="field"><label for="supplier-order-days">Days ordered</label><input id="supplier-order-days" name="orderDays" value="${escapeHtml(item.orderDays)}" maxlength="80" placeholder="e.g. M, TH or M, T, W, TH, F" /><p class="input-note">Optional · leave blank when you can order on any day.</p></div>
       <div class="field"><label for="supplier-rep-contact">Delivery issue contact</label><input id="supplier-rep-contact" name="repContact" value="${escapeHtml(item.repContact)}" maxlength="160" placeholder="Name · phone · email" /></div>
       <div class="field full"><label for="supplier-notes">Notes</label><textarea id="supplier-notes" name="notes" rows="3" maxlength="500" placeholder="Anything staff should know before ordering or receiving a delivery.">${escapeHtml(item.notes)}</textarea></div>
     </form>
@@ -623,11 +565,14 @@ function supplierForm(supplier) {
   $('#supplier-form').addEventListener('submit', (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const id = supplier ? supplier.id : supplierCode(form.get('id'));
+    const requestedCode = String(form.get('id')).trim();
+    const name = String(form.get('name')).trim();
+    if (!requestedCode || !name) return toast('Supplier code and name are required.');
+    const id = supplier ? supplier.id : supplierCode(requestedCode);
     if (!supplier && state.suppliers.some((candidate) => candidate.id === id)) return toast(`Supplier ID ${id} is already in use.`);
     const values = {
       id,
-      name: String(form.get('name')).trim(),
+      name,
       orderingMethod: String(form.get('orderingMethod')).trim(),
       orderDays: String(form.get('orderDays')).trim(),
       repContact: String(form.get('repContact')).trim(),
@@ -736,7 +681,7 @@ function downloadProducts() {
 }
 
 function downloadOrders() {
-  const rows = getOrders().map((product) => ({ 'Supplier ID': product.supplier.id, Supplier: product.supplier.name, 'Ordering method': product.supplier.orderingMethod, 'Order days': product.supplier.orderDays, 'Delivery contact': product.supplier.repContact, 'Product name': product.name, SKU: product.sku, 'Current stock': product.current, 'Minimum level': product.minimum, 'Par level': product.par, 'Order quantity': product.toOrder, Unit: product.unit, Location: product.location }));
+  const rows = getOrders().map((product) => ({ 'Supplier ID': product.supplier.id, Supplier: product.supplier.name, 'Ordering method': product.supplier.orderingMethod, 'Order days': orderDaysLabel(product.supplier), 'Delivery contact': product.supplier.repContact, 'Product name': product.name, SKU: product.sku, 'Current stock': product.current, 'Minimum level': product.minimum, 'Par level': product.par, 'Order quantity': product.toOrder, Unit: product.unit, Location: product.location }));
   if (!rows.length) return toast('There are no products below minimum to download.');
   downloadSheet(rows, 'Order list', `Josie_Coffee_Order_List_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
@@ -793,9 +738,9 @@ function importSuppliers(rows) {
   let added = 0; let updated = 0; let skipped = 0;
   rows.forEach((row) => {
     const name = String(valueAt(row, ['Supplier name', 'Supplier', 'Name'])).trim();
-    if (!name) { skipped += 1; return; }
     const suppliedId = String(valueAt(row, ['Supplier ID', 'ID'])).trim();
-    const id = supplierCode(suppliedId || name);
+    if (!name || !suppliedId) { skipped += 1; return; }
+    const id = supplierCode(suppliedId);
     const existing = state.suppliers.find((supplier) => supplier.id === id);
     const values = {
       id,
@@ -809,7 +754,7 @@ function importSuppliers(rows) {
     else { state.suppliers.push(values); added += 1; }
   });
   persist(); renderAll();
-  modal('Supplier upload complete', 'Your supplier book has been updated.', `<div class="upload-result"><strong>${added} added · ${updated} updated</strong><br />${skipped ? `${skipped} blank row${skipped === 1 ? '' : 's'} skipped.` : 'Every populated row was imported.'}</div><p class="modal-intro" style="margin-top:16px">Supplier IDs are stable references for product uploads and order lists.</p>`, '<button class="button primary" data-action="close-modal">Done</button>');
+  modal('Supplier upload complete', 'Your supplier book has been updated.', `<div class="upload-result"><strong>${added} added · ${updated} updated</strong><br />${skipped ? `${skipped} row${skipped === 1 ? '' : 's'} without a supplier name and code skipped.` : 'Every populated row was imported.'}</div><p class="modal-intro" style="margin-top:16px">Supplier codes are stable references for product uploads and order lists.</p>`, '<button class="button primary" data-action="close-modal">Done</button>');
 }
 
 function toSupplierRows() {
