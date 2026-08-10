@@ -136,3 +136,31 @@ test('falls back safely when saved JSON is invalid', () => {
   assert.equal(hasStoredState(storage), false);
   assert.deepEqual(loadState(storage), createInitialState());
 });
+
+test('keeps a placed order and its quantity in shared state', () => {
+  const storage = createStorage();
+  const state = {
+    suppliers: [{ id: 'BIOPAK', name: 'BioPak' }],
+    products: [{
+      id: 'cups',
+      name: 'Takeaway cups',
+      sku: 'JC-CUPS',
+      supplierId: 'BIOPAK',
+      par: 800,
+      minimum: 240,
+      current: 180,
+      location: 'Dry store',
+      unit: 'cup',
+      onOrderQuantity: 620,
+      onOrderAt: '2026-08-10T00:00:00.000Z',
+    }],
+    usageRecords: [],
+    stocktakes: [],
+  };
+
+  saveState(state, storage, { synced: true });
+
+  const restored = loadState(storage).products[0];
+  assert.equal(restored.onOrderQuantity, 620);
+  assert.equal(restored.onOrderAt, '2026-08-10T00:00:00.000Z');
+});

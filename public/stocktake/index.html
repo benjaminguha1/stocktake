@@ -15,17 +15,19 @@
   <body>
     <div class="app-shell">
       <aside class="sidebar">
+        <button class="mobile-menu-toggle" data-action="toggle-mobile-menu" aria-label="Open navigation menu" aria-controls="main-navigation" aria-expanded="false"><span></span><span></span><span></span></button>
         <a class="brand" href="#dashboard" data-route="dashboard" aria-label="Josie Coffee Stocktake home">
           <span class="brand-mark">J</span>
           <span><strong>josie</strong><small>COFFEE · STOCKTAKE</small></span>
         </a>
 
-        <nav class="main-nav" aria-label="Main navigation">
+        <nav class="main-nav" id="main-navigation" aria-label="Main navigation">
           <button class="nav-item active" data-route="dashboard"><span class="nav-icon">⌂</span>Overview</button>
           <button class="nav-item" data-route="products"><span class="nav-icon">▦</span>Products <span class="nav-count" id="product-count">0</span></button>
           <button class="nav-item" data-route="suppliers"><span class="nav-icon">⌁</span>Suppliers</button>
           <button class="nav-item" data-route="stocktake"><span class="nav-icon">✓</span>Stocktake</button>
           <button class="nav-item" data-route="orders"><span class="nav-icon">↗</span>Order list <span class="nav-count warning" id="order-count">0</span></button>
+          <button class="nav-item" data-route="deliveries"><span class="nav-icon">□</span>Deliveries <span class="nav-count" id="delivery-count">0</span></button>
           <button class="nav-item" data-route="insights"><span class="nav-icon">◔</span>Usage insights</button>
         </nav>
 
@@ -50,6 +52,12 @@
             <div><p class="kicker">TUESDAY CHECK-IN</p><h2>Your stock, at a glance.</h2><p class="muted">A quiet stockroom makes for a smooth service.</p></div>
             <button class="button primary" data-action="start-stocktake"><span>+</span> Start a stocktake</button>
           </div>
+
+          <nav class="dashboard-quick-links" aria-label="Quick actions">
+            <button class="quick-link" data-route="stocktake"><span class="quick-link-icon">✓</span><span><strong>Stocktake</strong><small>Count stock now</small></span><b>→</b></button>
+            <button class="quick-link" data-route="deliveries"><span class="quick-link-icon">□</span><span><strong>On order</strong><small>Receive deliveries</small></span><b>→</b></button>
+            <button class="quick-link" data-route="insights"><span class="quick-link-icon">◔</span><span><strong>Usage insights</strong><small>Review product movement</small></span><b>→</b></button>
+          </nav>
 
           <div class="metric-grid" id="metrics"></div>
 
@@ -79,13 +87,13 @@
         <section id="products" class="view" data-view="products">
           <div class="view-header"><div><p class="kicker">INVENTORY</p><h2>Products</h2><p class="muted">Everything you keep, in one calm place.</p></div><div class="view-actions"><button class="button secondary" data-action="download-template">Download template</button><label class="button secondary file-label">Upload sheet<input id="bulk-upload" type="file" accept=".xlsx,.xls,.csv" hidden /></label><button class="button primary" data-action="open-product-form"><span>+</span> Add product</button></div></div>
           <div class="toolbar"><label class="search"><span>⌕</span><input id="product-search" type="search" placeholder="Search products, SKU or supplier" /></label><select id="product-status-filter" aria-label="Filter product status"><option value="all">All stock levels</option><option value="below">Below minimum</option><option value="low">Getting low</option><option value="good">Healthy</option></select><select id="product-supplier-filter" aria-label="Filter product supplier"><option value="all">All suppliers</option></select><span class="toolbar-summary" id="product-summary"></span><span class="bulk-actions" id="product-bulk-actions" hidden><strong id="selected-product-count">0 selected</strong><button class="button destructive compact" data-action="confirm-delete-selected">Delete selected</button></span><button class="text-button export-button" data-action="download-products">Export <span>↓</span></button></div>
-          <div class="panel table-panel"><div class="table-wrap"><table><thead><tr><th class="select-cell"><input id="select-all-products" type="checkbox" aria-label="Select all visible products" /></th><th>Product</th><th>Supplier</th><th>Location</th><th>Current stock</th><th>Minimum</th><th>Par level</th><th>Status</th><th></th></tr></thead><tbody id="products-table"></tbody></table></div><div class="table-footer" id="products-footer"></div></div>
+          <div class="panel table-panel"><div class="table-wrap"><table><thead><tr><th class="select-cell"><input id="select-all-products" type="checkbox" aria-label="Select all visible products" /></th><th><button class="sort-button active" data-sort-table="products" data-sort-key="name">Product <span>↑</span></button></th><th><button class="sort-button" data-sort-table="products" data-sort-key="current">Current stock <span>↕</span></button></th><th><button class="sort-button" data-sort-table="products" data-sort-key="status">Status <span>↕</span></button></th><th><button class="sort-button" data-sort-table="products" data-sort-key="supplier">Supplier <span>↕</span></button></th><th><button class="sort-button" data-sort-table="products" data-sort-key="location">Location <span>↕</span></button></th><th><button class="sort-button" data-sort-table="products" data-sort-key="minimum">Minimum <span>↕</span></button></th><th><button class="sort-button" data-sort-table="products" data-sort-key="par">Par level <span>↕</span></button></th><th></th></tr></thead><tbody id="products-table"></tbody></table></div><div class="table-footer" id="products-footer"></div></div>
         </section>
 
         <section id="suppliers" class="view" data-view="suppliers">
           <div class="view-header"><div><p class="kicker">ORDER BOOK</p><h2>Suppliers</h2><p class="muted">Order instructions and delivery contacts, kept with the supplier record.</p></div><div class="view-actions"><button class="button secondary" data-action="download-supplier-template">Download template</button><label class="button secondary file-label">Upload sheet<input id="supplier-upload" type="file" accept=".xlsx,.xls,.csv" hidden /></label><button class="button primary" data-action="open-supplier-form"><span>+</span> Add supplier</button></div></div>
           <div class="toolbar"><span class="toolbar-summary" id="supplier-summary"></span><button class="text-button export-button" data-action="download-suppliers">Export <span>↓</span></button></div>
-          <div class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Supplier</th><th>How to order</th><th>Order days</th><th>Delivery issue contact</th><th>Products</th><th>Notes</th><th></th></tr></thead><tbody id="suppliers-table"></tbody></table></div><div class="table-footer">Supplier ID is the reference used by product uploads and order reports.</div></div>
+          <div class="panel table-panel"><div class="table-wrap"><table><thead><tr><th><button class="sort-button active" data-sort-table="suppliers" data-sort-key="name">Supplier <span>↑</span></button></th><th><button class="sort-button" data-sort-table="suppliers" data-sort-key="orderingMethod">How to order <span>↕</span></button></th><th><button class="sort-button" data-sort-table="suppliers" data-sort-key="orderDays">Order days <span>↕</span></button></th><th><button class="sort-button" data-sort-table="suppliers" data-sort-key="contact">Delivery issue contact <span>↕</span></button></th><th><button class="sort-button" data-sort-table="suppliers" data-sort-key="products">Products <span>↕</span></button></th><th>Notes</th><th></th></tr></thead><tbody id="suppliers-table"></tbody></table></div><div class="table-footer">Supplier ID is the reference used by product uploads and order reports.</div></div>
         </section>
 
         <section id="stocktake" class="view" data-view="stocktake">
@@ -96,20 +104,28 @@
             <button class="take-option" data-action="choose-section-take"><span class="take-icon">⌑</span><span><strong>By section</strong><small>Count one area, such as the front bar</small></span><b>→</b></button>
             <button class="take-option" data-action="choose-supplier-take"><span class="take-icon">⌁</span><span><strong>By supplier</strong><small>Count a supplier delivery group</small></span><b>→</b></button>
           </div>
-          <section class="panel history-panel"><div class="panel-heading"><div><p class="kicker">YOUR RECORD</p><h3>Recent stocktakes</h3></div></div><div id="stocktake-history"></div></section>
+          <section class="panel table-panel history-panel"><div class="panel-heading"><div><p class="kicker">YOUR RECORD</p><h3>Recent stocktakes</h3></div></div><div class="table-wrap"><table><thead><tr><th><button class="sort-button" data-sort-table="stocktakes" data-sort-key="label">Stocktake <span>↕</span></button></th><th><button class="sort-button" data-sort-table="stocktakes" data-sort-key="productCount">Products <span>↕</span></button></th><th><button class="sort-button" data-sort-table="stocktakes" data-sort-key="type">Type <span>↕</span></button></th><th><button class="sort-button active" data-sort-table="stocktakes" data-sort-key="completedAt">Completed <span>↓</span></button></th></tr></thead><tbody id="stocktake-history"></tbody></table></div></section>
         </section>
 
         <section id="orders" class="view" data-view="orders">
-          <div class="view-header"><div><p class="kicker">READY TO ORDER</p><h2>Order list</h2><p class="muted">Items below their minimum, grouped for an easy order.</p></div><div class="view-actions"><button class="button secondary" data-action="download-orders">Download order list</button><button class="button primary" data-action="print-orders">Print / save PDF</button></div></div>
+          <div class="view-header"><div><p class="kicker">READY TO ORDER</p><h2>Order list</h2><p class="muted">Items below their minimum that are not already on order.</p></div><div class="view-actions"><button class="button secondary" data-action="download-orders">Download order list</button><button class="button primary" data-action="print-orders">Print / save PDF</button></div></div>
           <div class="order-summary" id="order-summary"></div>
           <div id="supplier-orders" class="supplier-orders"></div>
+          <div class="order-bulk-actions" id="order-bulk-actions" hidden><span id="selected-order-count">0 selected</span><button class="button primary" data-action="place-selected-on-order">Place on order</button></div>
+        </section>
+
+        <section id="deliveries" class="view" data-view="deliveries">
+          <div class="view-header"><div><p class="kicker">INCOMING STOCK</p><h2>Deliveries</h2><p class="muted">Receive incoming products to add them to the stock on hand.</p></div></div>
+          <div class="order-summary" id="delivery-summary"></div>
+          <section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th class="select-cell"><input id="select-all-deliveries" type="checkbox" aria-label="Select all incoming products" /></th><th><button class="sort-button" data-sort-table="deliveries" data-sort-key="name">Product <span>↕</span></button></th><th><button class="sort-button" data-sort-table="deliveries" data-sort-key="current">Current stock <span>↕</span></button></th><th><button class="sort-button" data-sort-table="deliveries" data-sort-key="status">Status <span>↕</span></button></th><th><button class="sort-button" data-sort-table="deliveries" data-sort-key="onOrder">On order <span>↕</span></button></th><th><button class="sort-button" data-sort-table="deliveries" data-sort-key="supplier">Supplier <span>↕</span></button></th><th><button class="sort-button active" data-sort-table="deliveries" data-sort-key="orderedAt">Ordered <span>↓</span></button></th><th></th></tr></thead><tbody id="deliveries-table"></tbody></table></div><div class="table-footer">Receiving stock adds the recorded on-order quantity to the current stock level.</div></section>
+          <div class="order-bulk-actions" id="delivery-bulk-actions" hidden><span id="selected-delivery-count">0 selected</span><button class="button primary" data-action="receive-selected-deliveries">Mark received</button></div>
         </section>
 
         <section id="insights" class="view" data-view="insights">
           <div class="view-header"><div><p class="kicker">LONG-TERM VIEW</p><h2>Usage insights</h2><p class="muted">Make future ordering calmer with the record you are building.</p></div><select id="insight-range" aria-label="Select insight time range"><option value="28">Last 4 weeks</option><option value="56">Last 8 weeks</option><option value="84">Last 12 weeks</option></select></div>
           <div class="metric-grid insight-metrics" id="insight-metrics"></div>
           <div class="content-grid insight-grid"><section class="panel panel-wide"><div class="panel-heading"><div><p class="kicker">WEEKLY USAGE</p><h3>What’s moving</h3></div><span class="legend"><i></i>Average units used per week</span></div><div class="bar-chart" id="usage-chart"></div></section><section class="panel recommendation-panel"><div class="panel-heading"><div><p class="kicker">RECOMMENDED</p><h3>Par level tune-up</h3></div><span class="spark">✦</span></div><div id="recommendations"></div></section></div>
-          <section class="panel table-panel usage-table"><div class="panel-heading"><div><p class="kicker">PRODUCT DETAIL</p><h3>Usage history</h3></div><button class="text-button" data-action="download-usage">Export usage <span>↓</span></button></div><div class="table-wrap"><table><thead><tr><th>Product</th><th>Current</th><th>4-week usage</th><th>Weekly average</th><th>Trend</th><th>Suggested par</th></tr></thead><tbody id="usage-table"></tbody></table></div></section>
+          <section class="panel table-panel usage-table"><div class="panel-heading"><div><p class="kicker">PRODUCT DETAIL</p><h3>Usage history</h3></div><button class="text-button" data-action="download-usage">Export usage <span>↓</span></button></div><div class="table-wrap"><table><thead><tr><th class="select-cell">Graph</th><th><button class="sort-button" data-sort-table="insights" data-sort-key="name">Product <span>↕</span></button></th><th><button class="sort-button" data-sort-table="insights" data-sort-key="current">Current stock <span>↕</span></button></th><th><button class="sort-button" data-sort-table="insights" data-sort-key="status">Status <span>↕</span></button></th><th><button class="sort-button active" data-sort-table="insights" data-sort-key="used">Usage <span>↓</span></button></th><th><button class="sort-button" data-sort-table="insights" data-sort-key="weekly">Weekly average <span>↕</span></button></th><th><button class="sort-button" data-sort-table="insights" data-sort-key="trend">Trend <span>↕</span></button></th><th><button class="sort-button" data-sort-table="insights" data-sort-key="suggested">Suggested par <span>↕</span></button></th></tr></thead><tbody id="usage-table"></tbody></table></div></section>
         </section>
       </main>
     </div>
