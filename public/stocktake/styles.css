@@ -71,6 +71,7 @@ button { cursor: pointer; }
 .panel { box-shadow: var(--shadow); }
 .pill.warning { color: #a16207; background: #fffbeb; }
 .pill.neutral { color: var(--caramel); background: #eff6ff; }
+.pill.info { color: #1d4ed8; background: #dbeafe; }
 .tip-card:after { border-color: rgb(37 99 235 / 18%); }
 .tip-card p:not(.kicker) { color: #475569; }
 .take-option:hover { border-color: #bfdbfe; }
@@ -82,6 +83,11 @@ button { cursor: pointer; }
 .count-summary strong { font-size: 19px; }
 .bulk-actions { display: inline-flex; align-items: center; gap: 9px; margin-left: 0; padding-left: 10px; border-left: 1px solid var(--line); color: var(--muted); font-size: 11px; white-space: nowrap; }
 .bulk-actions[hidden] { display: none; }
+.order-item { grid-template-columns: 28px 1.5fr .7fr .7fr .7fr; }
+.order-item input { accent-color: var(--caramel); cursor: pointer; }
+.order-bulk-actions { display:flex; align-items:center; justify-content:flex-end; gap:12px; margin-top:16px; color:var(--muted); font-size:12px; }
+.order-bulk-actions[hidden] { display:none; }
+@media (max-width: 680px) { .order-item { grid-template-columns:28px 1fr 1fr; } }
 .button.destructive { color: #fff; background: var(--rose); border-color: var(--rose); }
 .button.destructive:hover { background: #991b1b; border-color: #991b1b; }
 .button.compact { min-height: 31px; padding: 0 10px; font-size: 11px; }

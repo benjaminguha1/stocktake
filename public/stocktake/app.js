@@ -75,6 +75,8 @@ let productQuery = '';
 let productStatus = 'all';
 let productSupplier = 'all';
 let selectedProductIds = new Set();
+let selectedOrderProductIds = new Set();
+let selectedDeliveryProductIds = new Set();
 let onlineSaveQueue = Promise.resolve();
 let onlineStorageAvailable = false;
 let onlineUser = null;
@@ -110,6 +112,21 @@ function supplierDetails(product) {
 
 function orderDaysLabel(supplier) {
   return supplier.orderDays || 'Any day';
+}
+
+function onOrderQuantity(product) {
+  const quantity = Number(product.onOrderQuantity || 0);
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
+}
+
+function isOnOrder(product) {
+  return onOrderQuantity(product) > 0;
+}
+
+function onOrderProducts() {
+  return state.products
+    .filter(isOnOrder)
+    .sort((a, b) => supplierName(a).localeCompare(supplierName(b)) || a.name.localeCompare(b.name));
 }
 
 function publicState() {
@@ -276,6 +293,7 @@ function productStatusOf(product) {
 }
 
 function statusMarkup(product) {
+  if (isOnOrder(product)) return `<span class="pill info">On order · ${formatQuantity(product, onOrderQuantity(product))}</span>`;
   const status = productStatusOf(product);
   const labels = { below: ['danger', 'Below minimum'], low: ['warning', 'Getting low'], good: ['success', 'Healthy'] };
   return `<span class="pill ${labels[status][0]}">${labels[status][1]}</span>`;
@@ -283,7 +301,7 @@ function statusMarkup(product) {
 
 function getOrders() {
   return state.products
-    .filter((product) => product.current < product.minimum)
+    .filter((product) => product.current < product.minimum && !isOnOrder(product))
     .map((product) => ({ ...product, supplier: supplierDetails(product), toOrder: Math.max(0, product.par - product.current) }))
     .sort((a, b) => a.supplier.name.localeCompare(b.supplier.name) || a.name.localeCompare(b.name));
 }
@@ -349,7 +367,7 @@ function toast(message) {
 
 function renderDashboard() {
   const orders = getOrders();
-  const low = state.products.filter((product) => productStatusOf(product) !== 'good').length;
+  const low = state.products.filter((product) => productStatusOf(product) !== 'good' && !isOnOrder(product)).length;
   const totalUsage = state.products.reduce((sum, product) => sum + usageFor(product.id, 28), 0);
   const lastTake = [...state.stocktakes].sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))[0];
   const days = lastTake ? daysBetween(lastTake.completedAt) : 0;
@@ -395,6 +413,7 @@ function renderDashboard() {
 
   $('#product-count').textContent = state.products.length;
   $('#order-count').textContent = orders.length;
+  $('#delivery-count').textContent = onOrderProducts().length;
   $('#today-label').textContent = todayLabel();
   void days;
 }
@@ -439,11 +458,15 @@ function renderStocktakes() {
 
 function renderOrders() {
   const orders = getOrders();
+  const availableIds = new Set(orders.map((product) => product.id));
+  selectedOrderProductIds = new Set([...selectedOrderProductIds].filter((id) => availableIds.has(id)));
   const supplierCount = new Set(orders.map((order) => order.supplier.id)).size;
   const totalUnits = orders.reduce((sum, order) => sum + order.toOrder, 0);
   $('#order-summary').innerHTML = `<div><strong>${orders.length}</strong><span>items below minimum</span></div><div><strong>${supplierCount}</strong><span>suppliers to contact</span></div><div><strong>${formatNumber(totalUnits)}</strong><span>units to return to par</span></div>`;
+  $('#order-bulk-actions').hidden = selectedOrderProductIds.size === 0;
+  $('#selected-order-count').textContent = `${selectedOrderProductIds.size} selected`;
   if (!orders.length) {
-    $('#supplier-orders').innerHTML = '<div class="no-orders"><strong>No orders needed right now.</strong><span>Your active products are all above their minimum levels.</span></div>';
+    $('#supplier-orders').innerHTML = '<div class="no-orders"><strong>No orders needed right now.</strong><span>Low-stock products already on order are available in Deliveries.</span></div>';
     return;
   }
   const groups = orders.reduce((map, order) => {
@@ -453,7 +476,62 @@ function renderOrders() {
   }, {});
   $('#supplier-orders').innerHTML = Object.values(groups)
     .sort((a, b) => a.supplier.name.localeCompare(b.supplier.name))
-    .map(({ supplier, items }) => `<section class="supplier-order"><div class="supplier-head"><div><h3>${escapeHtml(supplier.name)}</h3><p>${escapeHtml(supplier.id)} · ${items.length} line${items.length === 1 ? '' : 's'} ready to order · orders ${escapeHtml(orderDaysLabel(supplier))}</p>${supplier.orderingMethod ? `<small class="supplier-ordering">${escapeHtml(supplier.orderingMethod)}</small>` : ''}</div><span class="supplier-total">${formatNumber(items.reduce((sum, item) => sum + item.toOrder, 0))} units</span></div>${items.map((item) => `<div class="order-item"><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.sku)} · ${escapeHtml(item.location)}</small></div><span class="order-optional">Have ${formatQuantity(item, item.current)}</span><span class="order-optional">Par ${formatQuantity(item, item.par)}</span><b>Order ${formatQuantity(item, item.toOrder)}</b></div>`).join('')}</section>`).join('');
+    .map(({ supplier, items }) => `<section class="supplier-order"><div class="supplier-head"><div><h3>${escapeHtml(supplier.name)}</h3><p>${escapeHtml(supplier.id)} · ${items.length} line${items.length === 1 ? '' : 's'} ready to order · orders ${escapeHtml(orderDaysLabel(supplier))}</p>${supplier.orderingMethod ? `<small class="supplier-ordering">${escapeHtml(supplier.orderingMethod)}</small>` : ''}</div><span class="supplier-total">${formatNumber(items.reduce((sum, item) => sum + item.toOrder, 0))} units</span></div>${items.map((item) => `<div class="order-item"><input type="checkbox" data-order-select data-product-id="${item.id}" ${selectedOrderProductIds.has(item.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(item.name)} for ordering" /><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.sku)} · ${escapeHtml(item.location)}</small></div><span class="order-optional">Have ${formatQuantity(item, item.current)}</span><span class="order-optional">Par ${formatQuantity(item, item.par)}</span><b>Order ${formatQuantity(item, item.toOrder)}</b></div>`).join('')}</section>`).join('');
+}
+
+function renderDeliveries() {
+  const deliveries = onOrderProducts();
+  const availableIds = new Set(deliveries.map((product) => product.id));
+  selectedDeliveryProductIds = new Set([...selectedDeliveryProductIds].filter((id) => availableIds.has(id)));
+  const totalUnits = deliveries.reduce((sum, product) => sum + onOrderQuantity(product), 0);
+  const supplierCount = new Set(deliveries.map((product) => product.supplierId)).size;
+  $('#delivery-summary').innerHTML = `<div><strong>${deliveries.length}</strong><span>incoming products</span></div><div><strong>${supplierCount}</strong><span>suppliers expected</span></div><div><strong>${formatNumber(totalUnits)}</strong><span>units on order</span></div>`;
+  $('#delivery-bulk-actions').hidden = selectedDeliveryProductIds.size === 0;
+  $('#selected-delivery-count').textContent = `${selectedDeliveryProductIds.size} selected`;
+  const selectAll = $('#select-all-deliveries');
+  const selectedVisible = deliveries.filter((product) => selectedDeliveryProductIds.has(product.id));
+  selectAll.checked = deliveries.length > 0 && selectedVisible.length === deliveries.length;
+  selectAll.indeterminate = selectedVisible.length > 0 && selectedVisible.length < deliveries.length;
+  $('#deliveries-table').innerHTML = deliveries.length
+    ? deliveries.map((product) => `<tr><td class="select-cell"><input type="checkbox" data-delivery-select data-product-id="${product.id}" ${selectedDeliveryProductIds.has(product.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(product.name)} as received" /></td><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)} · ${escapeHtml(product.location)}</small></td><td>${escapeHtml(supplierName(product))}<small>${escapeHtml(product.supplierId)}</small></td><td><span class="stock-cell">${formatQuantity(product, onOrderQuantity(product))}</span></td><td>${product.onOrderAt ? displayDate(product.onOrderAt) : 'Not recorded'}</td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td class="row-actions"><button class="row-action delete-action" data-action="cancel-on-order" data-product-id="${product.id}">Cancel order</button></td></tr>`).join('')
+    : '<tr><td colspan="7"><div class="order-preview-empty">Nothing is currently on order.</div></td></tr>';
+}
+
+function placeSelectedOnOrder() {
+  const orders = getOrders().filter((product) => selectedOrderProductIds.has(product.id));
+  if (!orders.length) return toast('Select one or more products before placing an order.');
+  const orderedAt = new Date().toISOString();
+  orders.forEach((order) => {
+    const product = state.products.find((item) => item.id === order.id);
+    product.onOrderQuantity = order.toOrder;
+    product.onOrderAt = orderedAt;
+  });
+  selectedOrderProductIds.clear();
+  persist(); renderAll(); setRoute('deliveries');
+  toast(`${orders.length} product${orders.length === 1 ? '' : 's'} marked as on order.`);
+}
+
+function receiveSelectedDeliveries() {
+  const deliveries = onOrderProducts().filter((product) => selectedDeliveryProductIds.has(product.id));
+  if (!deliveries.length) return toast('Select one or more incoming products to receive.');
+  const unitsReceived = deliveries.reduce((total, product) => total + onOrderQuantity(product), 0);
+  deliveries.forEach((product) => {
+    product.current = cleanNumber(product.current) + onOrderQuantity(product);
+    product.onOrderQuantity = 0;
+    product.onOrderAt = '';
+  });
+  selectedDeliveryProductIds.clear();
+  persist(); renderAll();
+  toast(`${deliveries.length} delivery line${deliveries.length === 1 ? '' : 's'} received · ${formatNumber(unitsReceived)} units added to stock.`);
+}
+
+function cancelOnOrder(product) {
+  if (!product || !isOnOrder(product)) return;
+  product.onOrderQuantity = 0;
+  product.onOrderAt = '';
+  selectedDeliveryProductIds.delete(product.id);
+  persist(); renderAll();
+  toast('The incoming order was cancelled. The product is back on the order list if it is below minimum.');
 }
 
 function renderSuppliers() {
@@ -500,6 +578,7 @@ function renderAll() {
   renderSuppliers();
   renderStocktakes();
   renderOrders();
+  renderDeliveries();
   renderInsights();
 }
 
@@ -508,7 +587,7 @@ function setRoute(route) {
   $$('.view').forEach((view) => view.classList.toggle('active', view.dataset.view === route));
   $$('.nav-item').forEach((item) => item.classList.toggle('active', item.dataset.route === route));
   const labels = {
-    dashboard: ['STOCKTAKE', 'Good morning, Josie.'], products: ['INVENTORY', 'Product library'], suppliers: ['SUPPLIERS', 'Your ordering contacts.'], stocktake: ['COUNTING', 'Keep the shelves honest.'], orders: ['PURCHASING', 'Ready to order.'], insights: ['INSIGHTS', 'Learn your rhythm.'],
+    dashboard: ['STOCKTAKE', 'Good morning, Josie.'], products: ['INVENTORY', 'Product library'], suppliers: ['SUPPLIERS', 'Your ordering contacts.'], stocktake: ['COUNTING', 'Keep the shelves honest.'], orders: ['PURCHASING', 'Ready to order.'], deliveries: ['DELIVERIES', 'Incoming stock.'], insights: ['INSIGHTS', 'Learn your rhythm.'],
   };
   $('#page-eyebrow').textContent = labels[route][0];
   $('#page-title').textContent = labels[route][1];
@@ -650,6 +729,8 @@ function toRows(products) {
     'Par level': product.par,
     'Minimum level': product.minimum,
     'Current stock': product.current,
+    'On order quantity': onOrderQuantity(product),
+    'Ordered at': product.onOrderAt || '',
     Location: product.location,
     Unit: product.unit,
   }));
@@ -828,6 +909,9 @@ document.addEventListener('click', (event) => {
     'edit-supplier': () => supplierForm(supplier),
     'confirm-delete-product': () => confirmDeleteProducts(product ? [product.id] : []),
     'confirm-delete-selected': () => confirmDeleteProducts([...selectedProductIds]),
+    'place-selected-on-order': placeSelectedOnOrder,
+    'receive-selected-deliveries': receiveSelectedDeliveries,
+    'cancel-on-order': () => cancelOnOrder(product),
     'start-stocktake': () => startStocktake(action.dataset.takeType || 'full'),
     'choose-section-take': chooseSectionTake,
     'choose-supplier-take': chooseSupplierTake,
@@ -861,6 +945,20 @@ document.addEventListener('change', (event) => {
     const visibleIds = filteredProducts().map((product) => product.id);
     visibleIds.forEach((id) => target.checked ? selectedProductIds.add(id) : selectedProductIds.delete(id));
     renderProducts();
+  }
+  if (target.matches('[data-order-select]')) {
+    if (target.checked) selectedOrderProductIds.add(target.dataset.productId);
+    else selectedOrderProductIds.delete(target.dataset.productId);
+    renderOrders();
+  }
+  if (target.matches('[data-delivery-select]')) {
+    if (target.checked) selectedDeliveryProductIds.add(target.dataset.productId);
+    else selectedDeliveryProductIds.delete(target.dataset.productId);
+    renderDeliveries();
+  }
+  if (target.id === 'select-all-deliveries') {
+    onOrderProducts().forEach((product) => target.checked ? selectedDeliveryProductIds.add(product.id) : selectedDeliveryProductIds.delete(product.id));
+    renderDeliveries();
   }
 });
 $('#insight-range').addEventListener('change', renderInsights);

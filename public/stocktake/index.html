@@ -26,6 +26,7 @@
           <button class="nav-item" data-route="suppliers"><span class="nav-icon">⌁</span>Suppliers</button>
           <button class="nav-item" data-route="stocktake"><span class="nav-icon">✓</span>Stocktake</button>
           <button class="nav-item" data-route="orders"><span class="nav-icon">↗</span>Order list <span class="nav-count warning" id="order-count">0</span></button>
+          <button class="nav-item" data-route="deliveries"><span class="nav-icon">□</span>Deliveries <span class="nav-count" id="delivery-count">0</span></button>
           <button class="nav-item" data-route="insights"><span class="nav-icon">◔</span>Usage insights</button>
         </nav>
 
@@ -100,9 +101,17 @@
         </section>
 
         <section id="orders" class="view" data-view="orders">
-          <div class="view-header"><div><p class="kicker">READY TO ORDER</p><h2>Order list</h2><p class="muted">Items below their minimum, grouped for an easy order.</p></div><div class="view-actions"><button class="button secondary" data-action="download-orders">Download order list</button><button class="button primary" data-action="print-orders">Print / save PDF</button></div></div>
+          <div class="view-header"><div><p class="kicker">READY TO ORDER</p><h2>Order list</h2><p class="muted">Items below their minimum that are not already on order.</p></div><div class="view-actions"><button class="button secondary" data-action="download-orders">Download order list</button><button class="button primary" data-action="print-orders">Print / save PDF</button></div></div>
           <div class="order-summary" id="order-summary"></div>
           <div id="supplier-orders" class="supplier-orders"></div>
+          <div class="order-bulk-actions" id="order-bulk-actions" hidden><span id="selected-order-count">0 selected</span><button class="button primary" data-action="place-selected-on-order">Place on order</button></div>
+        </section>
+
+        <section id="deliveries" class="view" data-view="deliveries">
+          <div class="view-header"><div><p class="kicker">INCOMING STOCK</p><h2>Deliveries</h2><p class="muted">Receive incoming products to add them to the stock on hand.</p></div></div>
+          <div class="order-summary" id="delivery-summary"></div>
+          <section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th class="select-cell"><input id="select-all-deliveries" type="checkbox" aria-label="Select all incoming products" /></th><th>Product</th><th>Supplier</th><th>On order</th><th>Ordered</th><th>Current stock</th><th></th></tr></thead><tbody id="deliveries-table"></tbody></table></div><div class="table-footer">Receiving stock adds the recorded on-order quantity to the current stock level.</div></section>
+          <div class="order-bulk-actions" id="delivery-bulk-actions" hidden><span id="selected-delivery-count">0 selected</span><button class="button primary" data-action="receive-selected-deliveries">Mark received</button></div>
         </section>
 
         <section id="insights" class="view" data-view="insights">

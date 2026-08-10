@@ -71,6 +71,7 @@ export function normaliseState(value) {
 
   (Array.isArray(value.suppliers) ? value.suppliers : []).forEach(addSupplier);
   const products = value.products.map((product, index) => {
+    const onOrderQuantity = cleanNumber(product.onOrderQuantity);
     const supplied = String(product.supplierId || product.supplier || '').trim();
     const supplier =
       suppliers.find(
@@ -93,6 +94,8 @@ export function normaliseState(value) {
       current: cleanNumber(product.current),
       location: String(product.location || 'Unassigned location').trim(),
       unit: String(product.unit || 'unit').trim(),
+      onOrderQuantity,
+      onOrderAt: onOrderQuantity ? String(product.onOrderAt || '').trim() : '',
     };
   });
 
