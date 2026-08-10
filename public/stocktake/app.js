@@ -77,7 +77,6 @@ let productSupplier = 'all';
 let selectedProductIds = new Set();
 let selectedOrderProductIds = new Set();
 let selectedDeliveryProductIds = new Set();
-let orderQuantityOverrides = new Map();
 let selectedInsightProductIds = new Set();
 const tableSort = {
   products: { key: 'name', direction: 'asc' },
@@ -493,12 +492,10 @@ function renderStocktakes() {
 }
 
 function renderOrders() {
-  const availableOrders = getOrders();
-  const availableIds = new Set(availableOrders.map((product) => product.id));
-  orderQuantityOverrides = new Map([...orderQuantityOverrides].filter(([id]) => availableIds.has(id)));
-  const orders = sortRows(availableOrders.map((product) => ({ ...product, toOrder: orderQuantityOverrides.get(product.id) ?? product.toOrder })), 'orders', (product, key) => ({
+  const orders = sortRows(getOrders(), 'orders', (product, key) => ({
     name: product.name, current: product.current, status: statusSortValue(product), toOrder: product.toOrder, supplier: product.supplier.name, location: product.location,
   })[key]);
+  const availableIds = new Set(orders.map((product) => product.id));
   selectedOrderProductIds = new Set([...selectedOrderProductIds].filter((id) => availableIds.has(id)));
   const supplierCount = new Set(orders.map((order) => order.supplier.id)).size;
   const totalUnits = orders.reduce((sum, order) => sum + order.toOrder, 0);
@@ -509,7 +506,7 @@ function renderOrders() {
     $('#supplier-orders').innerHTML = '<div class="no-orders"><strong>No orders needed right now.</strong><span>Low-stock products already on order are available in Deliveries.</span></div>';
     return;
   }
-  $('#supplier-orders').innerHTML = `<section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th class="select-cell"></th><th>${sortableHeader('orders', 'name', 'Product')}</th><th>${sortableHeader('orders', 'current', 'Current stock')}</th><th>${sortableHeader('orders', 'status', 'Status')}</th><th>${sortableHeader('orders', 'toOrder', 'Order quantity')}</th><th>${sortableHeader('orders', 'supplier', 'Supplier')}</th><th>${sortableHeader('orders', 'location', 'Location')}</th></tr></thead><tbody>${orders.map((item) => `<tr><td class="select-cell"><input type="checkbox" data-order-select data-product-id="${item.id}" ${selectedOrderProductIds.has(item.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(item.name)} for ordering" /></td><td><span class="product-name">${escapeHtml(item.name)}</span><small>${escapeHtml(item.sku)}</small></td><td class="stock-cell">${formatQuantity(item, item.current)}</td><td>${statusMarkup(item)}</td><td><label class="order-quantity"><span class="sr-only">Order quantity for ${escapeHtml(item.name)}</span><input type="number" min="0" step="0.1" data-order-quantity data-product-id="${item.id}" value="${item.toOrder}" /></label></td><td>${escapeHtml(item.supplier.name)}<small>${escapeHtml(item.supplier.id)} · ${escapeHtml(orderDaysLabel(item.supplier))}</small></td><td><span class="cell-subtitle">${escapeHtml(item.location)}</span></td></tr>`).join('')}</tbody></table></div><div class="table-footer">Adjust a quantity when you want to order above or below the recommendation, then select the products to place on order.</div></section>`;
+  $('#supplier-orders').innerHTML = `<section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th class="select-cell"></th><th>${sortableHeader('orders', 'name', 'Product')}</th><th>${sortableHeader('orders', 'current', 'Current stock')}</th><th>${sortableHeader('orders', 'status', 'Status')}</th><th>${sortableHeader('orders', 'toOrder', 'Recommended')}</th><th>${sortableHeader('orders', 'supplier', 'Supplier')}</th><th>${sortableHeader('orders', 'location', 'Location')}</th></tr></thead><tbody>${orders.map((item) => `<tr><td class="select-cell"><input type="checkbox" data-order-select data-product-id="${item.id}" ${selectedOrderProductIds.has(item.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(item.name)} for ordering" /></td><td><span class="product-name">${escapeHtml(item.name)}</span><small>${escapeHtml(item.sku)}</small></td><td class="stock-cell">${formatQuantity(item, item.current)}</td><td>${statusMarkup(item)}</td><td class="stock-cell">${formatQuantity(item, item.toOrder)}</td><td>${escapeHtml(item.supplier.name)}<small>${escapeHtml(item.supplier.id)} · ${escapeHtml(orderDaysLabel(item.supplier))}</small></td><td><span class="cell-subtitle">${escapeHtml(item.location)}</span></td></tr>`).join('')}</tbody></table></div><div class="table-footer">Select products, then review and adjust their quantities before marking them on order.</div></section>`;
 }
 
 function renderDeliveries() {
@@ -533,19 +530,28 @@ function renderDeliveries() {
 }
 
 function placeSelectedOnOrder() {
-  const orders = getOrders().filter((product) => selectedOrderProductIds.has(product.id)).map((product) => ({ ...product, toOrder: orderQuantityOverrides.get(product.id) ?? product.toOrder }));
+  const orders = getOrders().filter((product) => selectedOrderProductIds.has(product.id));
   if (!orders.length) return toast('Select one or more products before placing an order.');
-  if (orders.some((order) => !Number.isFinite(Number(order.toOrder)) || Number(order.toOrder) <= 0)) return toast('Each selected product needs an order quantity greater than zero.');
-  const orderedAt = new Date().toISOString();
-  orders.forEach((order) => {
-    const product = state.products.find((item) => item.id === order.id);
-    product.onOrderQuantity = order.toOrder;
-    product.onOrderAt = orderedAt;
-    orderQuantityOverrides.delete(product.id);
+  modal('Review selected order', 'Adjust quantities here before the products are marked as on order for delivery.', `
+    <form id="order-review-form" class="order-review-list">
+      ${orders.map((order) => `<label class="order-review-row"><span><strong>${escapeHtml(order.name)}</strong><small>${escapeHtml(order.supplier.name)} · Recommended ${formatQuantity(order, order.toOrder)}</small></span><span class="order-review-input"><span>Order</span><input type="number" name="order-${order.id}" min="0" step="0.1" value="${order.toOrder}" aria-label="Order quantity for ${escapeHtml(order.name)}" /></span></label>`).join('')}
+    </form>
+  `, '<button class="button secondary" data-action="close-modal">Back to order list</button><button class="button primary" form="order-review-form" type="submit">Mark on order</button>');
+  $('#order-review-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    const reviewedOrders = orders.map((order) => ({ ...order, toOrder: Number(values.get(`order-${order.id}`)) }));
+    if (reviewedOrders.some((order) => !Number.isFinite(order.toOrder) || order.toOrder <= 0)) return toast('Each product needs an order quantity greater than zero.');
+    const orderedAt = new Date().toISOString();
+    reviewedOrders.forEach((order) => {
+      const product = state.products.find((item) => item.id === order.id);
+      product.onOrderQuantity = order.toOrder;
+      product.onOrderAt = orderedAt;
+    });
+    selectedOrderProductIds.clear();
+    persist(); renderAll(); closeModal(); setRoute('deliveries');
+    toast(`${reviewedOrders.length} product${reviewedOrders.length === 1 ? '' : 's'} marked as on order.`);
   });
-  selectedOrderProductIds.clear();
-  persist(); renderAll(); setRoute('deliveries');
-  toast(`${orders.length} product${orders.length === 1 ? '' : 's'} marked as on order.`);
 }
 
 function receiveSelectedDeliveries() {
@@ -1084,16 +1090,6 @@ document.addEventListener('change', (event) => {
   if (target.matches('[data-order-select]')) {
     if (target.checked) selectedOrderProductIds.add(target.dataset.productId);
     else selectedOrderProductIds.delete(target.dataset.productId);
-    renderOrders();
-  }
-  if (target.matches('[data-order-quantity]')) {
-    const quantity = Number(target.value);
-    if (!Number.isFinite(quantity) || quantity < 0) {
-      toast('Enter an order quantity of zero or more.');
-      renderOrders();
-      return;
-    }
-    orderQuantityOverrides.set(target.dataset.productId, quantity);
     renderOrders();
   }
   if (target.matches('[data-delivery-select]')) {
