@@ -804,9 +804,7 @@ function startStocktake(type = 'full', group = '') {
       else if (key !== '.') nextValue += key;
       input.value = nextValue;
       saveCurrentValue();
-      input.focus();
     });
-    requestAnimationFrame(() => $('#stocktake-quantity')?.focus());
   }
 
   function completeStocktake() {
