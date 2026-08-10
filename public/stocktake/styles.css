@@ -82,6 +82,7 @@ button { cursor: pointer; }
 .count-summary strong { font-size: 19px; }
 .bulk-actions { display: inline-flex; align-items: center; gap: 9px; margin-left: 0; padding-left: 10px; border-left: 1px solid var(--line); color: var(--muted); font-size: 11px; white-space: nowrap; }
 .bulk-actions[hidden] { display: none; }
+.archive-toggle { display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:11px; white-space:nowrap; cursor:pointer; }.archive-toggle input { accent-color:var(--caramel); }
 .button.destructive { color: #fff; background: var(--rose); border-color: var(--rose); }
 .button.destructive:hover { background: #991b1b; border-color: #991b1b; }
 .button.compact { min-height: 31px; padding: 0 10px; font-size: 11px; }

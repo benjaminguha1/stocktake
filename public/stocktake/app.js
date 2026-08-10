@@ -74,6 +74,8 @@ let activeRoute = 'dashboard';
 let productQuery = '';
 let productStatus = 'all';
 let productSupplier = 'all';
+let showArchivedProducts = false;
+let showArchivedSuppliers = false;
 let selectedProductIds = new Set();
 let onlineSaveQueue = Promise.resolve();
 let onlineStorageAvailable = false;
@@ -96,6 +98,23 @@ function persist() {
 
 function supplierById(id) {
   return state.suppliers.find((supplier) => supplier.id === id) || null;
+}
+
+function isSupplierActive(supplier) {
+  return Boolean(supplier) && !supplier.archived;
+}
+
+function isProductActive(product) {
+  const supplier = supplierById(product.supplierId);
+  return !product.archived && (!supplier || isSupplierActive(supplier));
+}
+
+function activeSuppliers() {
+  return state.suppliers.filter(isSupplierActive);
+}
+
+function activeProducts() {
+  return state.products.filter(isProductActive);
 }
 
 function supplierName(product) {
@@ -282,7 +301,7 @@ function statusMarkup(product) {
 }
 
 function getOrders() {
-  return state.products
+  return activeProducts()
     .filter((product) => product.current < product.minimum)
     .map((product) => ({ ...product, supplier: supplierDetails(product), toOrder: Math.max(0, product.par - product.current) }))
     .sort((a, b) => a.supplier.name.localeCompare(b.supplier.name) || a.name.localeCompare(b.name));
@@ -311,8 +330,8 @@ function suggestedPar(product) {
 }
 
 function isLowUse(product) {
-  const ranked = [...state.products].sort((a, b) => usageFor(a.id, 28) - usageFor(b.id, 28));
-  return ranked.slice(0, Math.max(3, Math.ceil(state.products.length * 0.35))).some((item) => item.id === product.id);
+  const ranked = activeProducts().sort((a, b) => usageFor(a.id, 28) - usageFor(b.id, 28));
+  return ranked.slice(0, Math.max(3, Math.ceil(ranked.length * 0.35))).some((item) => item.id === product.id);
 }
 
 function nextSku() {
@@ -348,16 +367,17 @@ function toast(message) {
 }
 
 function renderDashboard() {
+  const products = activeProducts();
   const orders = getOrders();
-  const low = state.products.filter((product) => productStatusOf(product) !== 'good').length;
-  const totalUsage = state.products.reduce((sum, product) => sum + usageFor(product.id, 28), 0);
+  const low = products.filter((product) => productStatusOf(product) !== 'good').length;
+  const totalUsage = products.reduce((sum, product) => sum + usageFor(product.id, 28), 0);
   const lastTake = [...state.stocktakes].sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))[0];
   const days = lastTake ? daysBetween(lastTake.completedAt) : 0;
   const latestFull = state.stocktakes.find((take) => take.type === 'full');
   const fullDays = latestFull ? daysBetween(latestFull.completedAt) : 99;
 
   $('#metrics').innerHTML = [
-    ['PRODUCTS TRACKED', state.products.length, 'Active stock lines', '▦'],
+    ['PRODUCTS TRACKED', products.length, 'Active stock lines', '▦'],
     ['NEED ATTENTION', low, low ? `${orders.length} below minimum` : 'Everything healthy', '↓'],
     ['ORDER TODAY', orders.length, orders.length ? `${new Set(orders.map((item) => item.supplier.id)).size} suppliers` : 'Nothing to order', '↗'],
     ['4-WEEK MOVEMENT', formatNumber(totalUsage), 'Units counted as used', '◔'],
@@ -367,7 +387,7 @@ function renderDashboard() {
     ? orders.slice(0, 4).map((product) => `<div class="order-preview-row"><div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)} · ${escapeHtml(product.location)}</small></div><span class="supplier-chip">${escapeHtml(product.supplier.name)}</span><span class="need">Order ${formatQuantity(product, product.toOrder)}</span>${statusMarkup(product)}</div>`).join('')
     : '<div class="order-preview-empty">Everything is above minimum. No orders are waiting.</div>';
 
-  const mostUsed = [...state.products]
+  const mostUsed = [...products]
     .map((product) => ({ ...product, used: usageFor(product.id, 28) }))
     .filter((product) => product.used > 0)
     .sort((a, b) => b.used - a.used)
@@ -380,7 +400,7 @@ function renderDashboard() {
   $('#days-since-stocktake').textContent = fullDays;
   $('#stocktake-rhythm').textContent = fullDays <= 7 ? '1 / 1 complete' : '0 / 1 complete';
   $('#stocktake-progress').style.width = `${fullDays <= 7 ? 100 : Math.max(0, 100 - (fullDays - 7) * 12)}%`;
-  const recs = state.products
+  const recs = products
     .map((product) => ({ product, suggestion: suggestedPar(product) }))
     .filter(({ product, suggestion }) => Math.abs(suggestion - product.par) >= Math.max(product.unit === 'kg' ? .5 : 2, product.par * .15))
     .sort((a, b) => Math.abs(b.suggestion - b.product.par) - Math.abs(a.suggestion - a.product.par));
@@ -393,7 +413,7 @@ function renderDashboard() {
     $('#smart-note-text').textContent = 'Keep completing stocktakes. We will flag a change once the pattern is clear.';
   }
 
-  $('#product-count').textContent = state.products.length;
+  $('#product-count').textContent = products.length;
   $('#order-count').textContent = orders.length;
   $('#today-label').textContent = todayLabel();
   void days;
@@ -402,32 +422,51 @@ function renderDashboard() {
 function filteredProducts() {
   const query = productQuery.trim().toLowerCase();
   return state.products.filter((product) => {
+    const matchesArchive = showArchivedProducts ? !isProductActive(product) : isProductActive(product);
     const matchesQuery = !query || [product.name, product.sku, product.supplierId, supplierName(product), product.location].some((value) => String(value).toLowerCase().includes(query));
-    const matchesStatus = productStatus === 'all' || productStatusOf(product) === productStatus;
+    const matchesStatus = showArchivedProducts || productStatus === 'all' || productStatusOf(product) === productStatus;
     const matchesSupplier = productSupplier === 'all' || product.supplierId === productSupplier;
-    return matchesQuery && matchesStatus && matchesSupplier;
+    return matchesArchive && matchesQuery && matchesStatus && matchesSupplier;
   });
 }
 
 function renderProducts() {
-  const activeIds = new Set(state.products.map((product) => product.id));
-  selectedProductIds = new Set([...selectedProductIds].filter((id) => activeIds.has(id)));
+  const visibleIds = new Set(filteredProducts().map((product) => product.id));
+  selectedProductIds = new Set([...selectedProductIds].filter((id) => visibleIds.has(id)));
   const supplierSelect = $('#product-supplier-filter');
-  supplierSelect.innerHTML = `<option value="all">All suppliers</option>${state.suppliers.slice().sort((a, b) => a.name.localeCompare(b.name)).map((supplier) => `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)} · ${escapeHtml(supplier.id)}</option>`).join('')}`;
+  const selectableSuppliers = showArchivedProducts ? state.suppliers : activeSuppliers();
+  supplierSelect.innerHTML = `<option value="all">All suppliers</option>${selectableSuppliers.slice().sort((a, b) => a.name.localeCompare(b.name)).map((supplier) => `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)} · ${escapeHtml(supplier.id)}</option>`).join('')}`;
+  if (productSupplier !== 'all' && !selectableSuppliers.some((supplier) => supplier.id === productSupplier)) productSupplier = 'all';
   supplierSelect.value = productSupplier;
   const products = filteredProducts();
   const visibleSelected = products.filter((product) => selectedProductIds.has(product.id));
   const selectedCount = selectedProductIds.size;
-  $('#product-summary').textContent = `${products.length} of ${state.products.length} products`;
+  const activeCount = activeProducts().length;
+  const archivedCount = state.products.length - activeCount;
+  $('#show-archived-products').checked = showArchivedProducts;
+  $('#product-summary').textContent = showArchivedProducts
+    ? `${products.length} archived or unavailable · ${activeCount} active`
+    : `${products.length} of ${activeCount} active products${archivedCount ? ` · ${archivedCount} archived` : ''}`;
   $('#product-bulk-actions').hidden = selectedCount === 0;
   $('#selected-product-count').textContent = `${selectedCount} selected`;
   const selectAll = $('#select-all-products');
   selectAll.checked = products.length > 0 && visibleSelected.length === products.length;
   selectAll.indeterminate = visibleSelected.length > 0 && visibleSelected.length < products.length;
   $('#products-table').innerHTML = products.length
-    ? products.map((product) => `<tr><td class="select-cell"><input type="checkbox" data-product-select data-product-id="${product.id}" ${selectedProductIds.has(product.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(product.name)}" /></td><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)}</small></td><td>${escapeHtml(supplierName(product))}<small>${escapeHtml(product.supplierId)}</small></td><td><span class="cell-subtitle">${escapeHtml(product.location)}</span></td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td>${formatQuantity(product, product.minimum)}</td><td>${formatQuantity(product, product.par)}</td><td>${statusMarkup(product)}</td><td class="row-actions"><button class="row-action edit-action" data-action="edit-product" data-product-id="${product.id}">Edit</button><button class="row-action delete-action" data-action="confirm-delete-product" data-product-id="${product.id}">Delete</button></td></tr>`).join('')
-    : '<tr><td colspan="9"><div class="order-preview-empty">No products match those filters.</div></td></tr>';
-  $('#products-footer').textContent = 'Stock levels update whenever a stocktake is completed.';
+    ? products.map((product) => {
+      const supplierIsArchived = Boolean(supplierById(product.supplierId)?.archived);
+      const archiveLabel = product.archived ? 'Restore' : 'Archive';
+      const status = product.archived
+        ? '<span class="pill neutral">Archived</span>'
+        : supplierIsArchived
+          ? '<span class="pill neutral">Supplier archived</span>'
+          : statusMarkup(product);
+      return `<tr><td class="select-cell"><input type="checkbox" data-product-select data-product-id="${product.id}" ${selectedProductIds.has(product.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(product.name)}" /></td><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)}</small></td><td>${escapeHtml(supplierName(product))}<small>${escapeHtml(product.supplierId)}</small></td><td><span class="cell-subtitle">${escapeHtml(product.location)}</span></td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td>${formatQuantity(product, product.minimum)}</td><td>${formatQuantity(product, product.par)}</td><td>${status}</td><td class="row-actions"><button class="row-action edit-action" data-action="edit-product" data-product-id="${product.id}">Edit</button><button class="row-action" data-action="toggle-product-archive" data-product-id="${product.id}">${archiveLabel}</button><button class="row-action delete-action" data-action="confirm-delete-product" data-product-id="${product.id}">Delete</button></td></tr>`;
+    }).join('')
+    : `<tr><td colspan="9"><div class="order-preview-empty">${showArchivedProducts ? 'No archived products match those filters.' : 'No active products match those filters.'}</div></td></tr>`;
+  $('#products-footer').textContent = showArchivedProducts
+    ? 'Restore a product to return it to reports, orders and stocktakes.'
+    : 'Archived products are kept safely but excluded from reports, orders and stocktakes.';
 }
 
 function renderStocktakes() {
@@ -457,21 +496,28 @@ function renderOrders() {
 }
 
 function renderSuppliers() {
-  const suppliers = state.suppliers.slice().sort((a, b) => a.name.localeCompare(b.name));
-  $('#supplier-summary').textContent = `${suppliers.length} supplier${suppliers.length === 1 ? '' : 's'} in your order book`;
+  const suppliers = (showArchivedSuppliers ? state.suppliers.filter((supplier) => supplier.archived) : activeSuppliers()).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const activeCount = activeSuppliers().length;
+  const archivedCount = state.suppliers.length - activeCount;
+  $('#show-archived-suppliers').checked = showArchivedSuppliers;
+  $('#supplier-summary').textContent = showArchivedSuppliers
+    ? `${suppliers.length} archived supplier${suppliers.length === 1 ? '' : 's'}`
+    : `${suppliers.length} supplier${suppliers.length === 1 ? '' : 's'} in your order book${archivedCount ? ` · ${archivedCount} archived` : ''}`;
   $('#suppliers-table').innerHTML = suppliers.length
     ? suppliers.map((supplier) => {
-      const productCount = state.products.filter((product) => product.supplierId === supplier.id).length;
-      return `<tr><td><span class="product-name">${escapeHtml(supplier.name)}</span><small>${escapeHtml(supplier.id)}</small></td><td>${escapeHtml(supplier.orderingMethod || 'Not recorded')}</td><td>${escapeHtml(orderDaysLabel(supplier))}</td><td>${escapeHtml(supplier.repContact || 'Not recorded')}</td><td class="stock-cell">${productCount}</td><td><span class="cell-subtitle">${escapeHtml(supplier.notes || '—')}</span></td><td class="row-actions"><button class="row-action edit-action" data-action="edit-supplier" data-supplier-id="${escapeHtml(supplier.id)}">Edit</button></td></tr>`;
+      const productCount = state.products.filter((product) => product.supplierId === supplier.id && !product.archived).length;
+      return `<tr><td><span class="product-name">${escapeHtml(supplier.name)}</span><small>${escapeHtml(supplier.id)}</small></td><td>${escapeHtml(supplier.orderingMethod || 'Not recorded')}</td><td>${escapeHtml(orderDaysLabel(supplier))}</td><td>${escapeHtml(supplier.repContact || 'Not recorded')}</td><td class="stock-cell">${productCount}</td><td><span class="cell-subtitle">${escapeHtml(supplier.notes || '—')}</span></td><td class="row-actions"><button class="row-action edit-action" data-action="edit-supplier" data-supplier-id="${escapeHtml(supplier.id)}">Edit</button><button class="row-action" data-action="toggle-supplier-archive" data-supplier-id="${escapeHtml(supplier.id)}">${supplier.archived ? 'Restore' : 'Archive'}</button></td></tr>`;
     }).join('')
-    : '<tr><td colspan="7"><div class="order-preview-empty">Add a supplier before adding its products.</div></td></tr>';
+    : `<tr><td colspan="7"><div class="order-preview-empty">${showArchivedSuppliers ? 'No archived suppliers.' : 'Add a supplier before adding its products.'}</div></td></tr>`;
 }
 
 function renderInsights() {
   const days = Number($('#insight-range').value || 28);
-  const usage = state.products.map((product) => ({ ...product, used: usageFor(product.id, days), recent: usageFor(product.id, Math.max(7, days / 2)) }));
+  const products = activeProducts();
+  const activeProductIds = new Set(products.map((product) => product.id));
+  const usage = products.map((product) => ({ ...product, used: usageFor(product.id, days), recent: usageFor(product.id, Math.max(7, days / 2)) }));
   const total = usage.reduce((sum, product) => sum + product.used, 0);
-  const dataPoints = state.usageRecords.filter((record) => new Date(record.recordedAt).getTime() >= Date.now() - days * DAY).length;
+  const dataPoints = state.usageRecords.filter((record) => activeProductIds.has(record.productId) && new Date(record.recordedAt).getTime() >= Date.now() - days * DAY).length;
   const recommendations = usage.map((product) => ({ product, suggested: suggestedPar(product) })).filter(({ product, suggested }) => Math.abs(suggested - product.par) >= Math.max(product.unit === 'kg' ? .5 : 2, product.par * .15));
   $('#insight-metrics').innerHTML = [
     ['RECORDED USAGE', formatNumber(total), `Across the last ${days / 7} weeks`, '◔'],
@@ -516,16 +562,19 @@ function setRoute(route) {
 }
 
 function productForm(product) {
-  if (!state.suppliers.length) {
+  const availableSuppliers = product
+    ? state.suppliers.filter((supplier) => !supplier.archived || supplier.id === product.supplierId)
+    : activeSuppliers();
+  if (!availableSuppliers.length) {
     setRoute('suppliers');
-    return toast('Add a supplier before adding products.');
+    return toast('Restore or add an active supplier before adding products.');
   }
-  const item = product || { name: '', sku: nextSku(), supplierId: state.suppliers[0].id, par: '', minimum: '', current: '', location: '', unit: '' };
+  const item = product || { name: '', sku: nextSku(), supplierId: availableSuppliers[0].id, par: '', minimum: '', current: '', location: '', unit: '', archived: false };
   modal(product ? 'Edit product' : 'Add product', product ? 'Update its stock settings or location.' : 'Create a product line. A SKU is assigned automatically.', `
     <form id="product-form" class="form-grid">
       <div class="field full"><label for="product-name">Product name</label><input id="product-name" name="name" value="${escapeHtml(item.name)}" required maxlength="90" placeholder="e.g. House blend coffee" /></div>
       <div class="field"><label for="product-sku">Product SKU</label><input id="product-sku" name="sku" value="${escapeHtml(item.sku)}" required maxlength="32" /><p class="input-note">Auto-generated; you can replace it if needed.</p></div>
-      <div class="field"><label for="product-supplier">Supplier</label><select id="product-supplier" name="supplierId" required>${state.suppliers.slice().sort((a, b) => a.name.localeCompare(b.name)).map((supplier) => `<option value="${escapeHtml(supplier.id)}" ${supplier.id === item.supplierId ? 'selected' : ''}>${escapeHtml(supplier.name)} · ${escapeHtml(supplier.id)}</option>`).join('')}</select><p class="input-note">Suppliers are managed in the supplier book.</p></div>
+      <div class="field"><label for="product-supplier">Supplier</label><select id="product-supplier" name="supplierId" required>${availableSuppliers.slice().sort((a, b) => a.name.localeCompare(b.name)).map((supplier) => `<option value="${escapeHtml(supplier.id)}" ${supplier.id === item.supplierId ? 'selected' : ''}>${escapeHtml(supplier.name)} · ${escapeHtml(supplier.id)}</option>`).join('')}</select><p class="input-note">Archived suppliers are not available for new products.</p></div>
       <div class="field"><label for="product-par">Par level</label><input id="product-par" name="par" value="${item.par}" type="number" min="0" step="0.1" required /></div>
       <div class="field"><label for="product-minimum">Minimum level</label><input id="product-minimum" name="minimum" value="${item.minimum}" type="number" min="0" step="0.1" required /></div>
       <div class="field"><label for="product-current">Current stock</label><input id="product-current" name="current" value="${item.current}" type="number" min="0" step="0.1" required /></div>
@@ -540,7 +589,7 @@ function productForm(product) {
     const duplicate = state.products.find((candidate) => candidate.sku.toUpperCase() === sku && candidate.id !== product?.id);
     if (duplicate) return toast(`SKU ${sku} is already in use.`);
     const values = {
-      name: String(form.get('name')).trim(), sku, supplierId: String(form.get('supplierId')).trim(), location: String(form.get('location')).trim(), unit: String(form.get('unit')).trim(),
+      name: String(form.get('name')).trim(), sku, supplierId: String(form.get('supplierId')).trim(), location: String(form.get('location')).trim(), unit: String(form.get('unit')).trim(), archived: Boolean(product?.archived),
       par: cleanNumber(form.get('par')), minimum: cleanNumber(form.get('minimum')), current: cleanNumber(form.get('current')),
     };
     if (values.minimum > values.par) return toast('Minimum level should not be higher than par level.');
@@ -577,6 +626,7 @@ function supplierForm(supplier) {
       orderDays: String(form.get('orderDays')).trim(),
       repContact: String(form.get('repContact')).trim(),
       notes: String(form.get('notes')).trim(),
+      archived: Boolean(supplier?.archived),
     };
     if (supplier) Object.assign(supplier, values);
     else state.suppliers.push(values);
@@ -600,10 +650,40 @@ function confirmDeleteProducts(productIds) {
   });
 }
 
+function toggleProductArchive(product) {
+  if (!product) return;
+  if (product.archived) {
+    const supplier = supplierById(product.supplierId);
+    if (supplier?.archived) return toast('Restore this product’s supplier first.');
+  }
+  product.archived = !product.archived;
+  selectedProductIds.delete(product.id);
+  persist(); renderAll();
+  toast(product.archived ? 'Product archived. It is excluded from reports and stocktakes.' : 'Product restored to reports and stocktakes.');
+}
+
+function finishSupplierArchive(supplier, archived) {
+  supplier.archived = archived;
+  persist(); renderAll(); closeModal();
+  toast(archived ? 'Supplier archived. Linked products are excluded from reports and stocktakes.' : 'Supplier restored to the order book.');
+}
+
+function toggleSupplierArchive(supplier) {
+  if (!supplier) return;
+  if (supplier.archived) return finishSupplierArchive(supplier, false);
+  const linkedProducts = state.products.filter((product) => product.supplierId === supplier.id && !product.archived);
+  const linkedMessage = linkedProducts.length
+    ? `Its ${linkedProducts.length} active linked product${linkedProducts.length === 1 ? '' : 's'} will also be excluded from reports, orders and stocktakes until the supplier is restored.`
+    : 'It has no active linked products.';
+  modal('Archive this supplier?', 'This is reversible and preserves all records.', `<p class="modal-intro"><strong>${escapeHtml(supplier.name)}</strong> will be removed from the active order book. ${linkedMessage}</p>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" id="confirm-supplier-archive">Archive supplier</button>');
+  $('#confirm-supplier-archive').addEventListener('click', () => finishSupplierArchive(supplier, true));
+}
+
 function startStocktake(type = 'full', group = '') {
   const supplier = supplierById(group);
-  const eligible = state.products.filter((product) => type === 'full' || (type === 'low' ? isLowUse(product) : type === 'supplier' ? product.supplierId === group : product.location === group));
+  const eligible = activeProducts().filter((product) => type === 'full' || (type === 'low' ? isLowUse(product) : type === 'supplier' ? product.supplierId === group : product.location === group));
   const labels = { full: 'Full stocktake', low: 'Low-use item stocktake', supplier: `${supplier?.name || group} stocktake`, section: `${group} stocktake` };
+  if (!eligible.length) return toast('There are no active products in this stocktake.');
   modal(labels[type], `${eligible.length} product${eligible.length === 1 ? '' : 's'} to count. Leave a field unchanged to keep the recorded level.`, `
     <div class="count-summary"><strong>Count today’s stock</strong><span>${eligible.length} lines</span></div>
     <input class="count-search" id="count-search" type="search" placeholder="Find a product to count" />
@@ -629,14 +709,14 @@ function startStocktake(type = 'full', group = '') {
 }
 
 function chooseSupplierTake() {
-  const suppliers = state.suppliers.filter((supplier) => state.products.some((product) => product.supplierId === supplier.id)).sort((a, b) => a.name.localeCompare(b.name));
+  const suppliers = activeSuppliers().filter((supplier) => activeProducts().some((product) => product.supplierId === supplier.id)).sort((a, b) => a.name.localeCompare(b.name));
   if (!suppliers.length) return toast('Add products to a supplier before starting this stocktake.');
   modal('Stocktake by supplier', 'Choose the delivery group you want to count.', `<div class="field"><label for="take-supplier">Supplier</label><select id="take-supplier">${suppliers.map((supplier) => `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)} · ${escapeHtml(supplier.id)}</option>`).join('')}</select></div>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" id="continue-supplier-take">Continue</button>');
   $('#continue-supplier-take').addEventListener('click', () => startStocktake('supplier', $('#take-supplier').value));
 }
 
 function chooseSectionTake() {
-  const sections = [...new Set(state.products.map((product) => product.location))].sort();
+  const sections = [...new Set(activeProducts().map((product) => product.location))].sort();
   modal('Stocktake by section', 'Choose the area you want to count.', `<div class="field"><label for="take-section">Section</label><select id="take-section">${sections.map((section) => `<option value="${escapeHtml(section)}">${escapeHtml(section)}</option>`).join('')}</select></div>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" id="continue-section-take">Continue</button>');
   $('#continue-section-take').addEventListener('click', () => startStocktake('section', $('#take-section').value));
 }
@@ -677,7 +757,7 @@ function downloadTemplate() {
 }
 
 function downloadProducts() {
-  downloadSheet(toRows(state.products), 'Products', `Josie_Coffee_Products_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  downloadSheet(toRows(activeProducts()), 'Products', `Josie_Coffee_Products_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 function downloadOrders() {
@@ -687,7 +767,7 @@ function downloadOrders() {
 }
 
 function downloadUsage() {
-  const rows = state.products.map((product) => ({ 'Product name': product.name, SKU: product.sku, 'Supplier ID': product.supplierId, Supplier: supplierName(product), '4-week usage': usageFor(product.id, 28), '12-week usage': usageFor(product.id, 84), 'Suggested par': suggestedPar(product), 'Current par': product.par, Unit: product.unit }));
+  const rows = activeProducts().map((product) => ({ 'Product name': product.name, SKU: product.sku, 'Supplier ID': product.supplierId, Supplier: supplierName(product), '4-week usage': usageFor(product.id, 28), '12-week usage': usageFor(product.id, 84), 'Suggested par': suggestedPar(product), 'Current par': product.par, Unit: product.unit }));
   downloadSheet(rows, 'Usage insights', `Josie_Coffee_Usage_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
@@ -710,7 +790,7 @@ function importRows(rows) {
     const skuInput = String(valueAt(row, ['Product SKU', 'SKU'])).trim().toUpperCase();
     const existing = state.products.find((product) => product.sku.toUpperCase() === skuInput && skuInput);
     const supplierInput = String(valueAt(row, ['Supplier ID', 'Supplier'])).trim();
-    const supplier = state.suppliers.find((candidate) => candidate.id === supplierCode(supplierInput) || candidate.name.toLowerCase() === supplierInput.toLowerCase());
+    const supplier = activeSuppliers().find((candidate) => candidate.id === supplierCode(supplierInput) || candidate.name.toLowerCase() === supplierInput.toLowerCase());
     if (!supplier) {
       unknownSupplierIds.add(supplierInput || 'blank supplier ID');
       skipped += 1;
@@ -725,6 +805,7 @@ function importRows(rows) {
       current: cleanNumber(valueAt(row, ['Current stock', 'Current', 'Stock'])),
       location: String(valueAt(row, ['Location'])).trim() || 'Unassigned location',
       unit: String(valueAt(row, ['Unit', 'Units'])).trim() || 'unit',
+      archived: false,
     };
     if (existing) { Object.assign(existing, product); updated += 1; }
     else { state.products.push({ id: `p-${Date.now().toString(36)}-${added}`, ...product }); added += 1; }
@@ -749,6 +830,7 @@ function importSuppliers(rows) {
       orderDays: String(valueAt(row, ['Days ordered', 'Order days'])).trim(),
       repContact: String(valueAt(row, ['Rep contact and details for delivery issues', 'Rep contact', 'Delivery contact'])).trim(),
       notes: String(valueAt(row, ['Notes'])).trim(),
+      archived: false,
     };
     if (existing) { Object.assign(existing, values); updated += 1; }
     else { state.suppliers.push(values); added += 1; }
@@ -758,7 +840,7 @@ function importSuppliers(rows) {
 }
 
 function toSupplierRows() {
-  return state.suppliers.map((supplier) => ({
+  return activeSuppliers().map((supplier) => ({
     'Supplier name': supplier.name,
     'Supplier ID': supplier.id,
     'How ordering takes place': supplier.orderingMethod,
@@ -828,6 +910,8 @@ document.addEventListener('click', (event) => {
     'edit-supplier': () => supplierForm(supplier),
     'confirm-delete-product': () => confirmDeleteProducts(product ? [product.id] : []),
     'confirm-delete-selected': () => confirmDeleteProducts([...selectedProductIds]),
+    'toggle-product-archive': () => toggleProductArchive(product),
+    'toggle-supplier-archive': () => toggleSupplierArchive(supplier),
     'start-stocktake': () => startStocktake(action.dataset.takeType || 'full'),
     'choose-section-take': chooseSectionTake,
     'choose-supplier-take': chooseSupplierTake,
@@ -861,6 +945,15 @@ document.addEventListener('change', (event) => {
     const visibleIds = filteredProducts().map((product) => product.id);
     visibleIds.forEach((id) => target.checked ? selectedProductIds.add(id) : selectedProductIds.delete(id));
     renderProducts();
+  }
+  if (target.id === 'show-archived-products') {
+    showArchivedProducts = target.checked;
+    selectedProductIds.clear();
+    renderProducts();
+  }
+  if (target.id === 'show-archived-suppliers') {
+    showArchivedSuppliers = target.checked;
+    renderSuppliers();
   }
 });
 $('#insight-range').addEventListener('change', renderInsights);

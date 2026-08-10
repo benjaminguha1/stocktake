@@ -64,6 +64,7 @@ export function normaliseState(value) {
       orderDays: String(candidate.orderDays || '').trim(),
       repContact: String(candidate.repContact || '').trim(),
       notes: String(candidate.notes || '').trim(),
+      archived: Boolean(candidate.archived),
     };
     suppliers.push(supplier);
     return supplier;
@@ -93,6 +94,7 @@ export function normaliseState(value) {
       current: cleanNumber(product.current),
       location: String(product.location || 'Unassigned location').trim(),
       unit: String(product.unit || 'unit').trim(),
+      archived: Boolean(product.archived),
     };
   });
 

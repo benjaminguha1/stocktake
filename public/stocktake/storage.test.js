@@ -40,6 +40,7 @@ test('persists a supplier-only stockroom and tracks its pending sync', () => {
         orderDays: 'Monday',
         repContact: 'orders@example.com',
         notes: 'Deliver before noon',
+        archived: false,
       },
     ],
     products: [],
@@ -77,6 +78,7 @@ test('keeps ordering details optional and treats an empty order-days value as va
       orderDays: '',
       repContact: '',
       notes: '',
+      archived: false,
     },
   ]);
 });
@@ -122,9 +124,11 @@ test('migrates legacy supplier names to supplier IDs without dropping supplier d
       orderDays: 'Thursday',
       repContact: 'Mia',
       notes: 'Use weekly order template',
+      archived: false,
     },
   ]);
   assert.equal(state.products[0].supplierId, 'COFFEE-SUPREME');
+  assert.equal(state.products[0].archived, false);
   assert.equal(state.usageRecords.length, 1);
   assert.equal(state.stocktakes.length, 1);
 });
@@ -135,4 +139,32 @@ test('falls back safely when saved JSON is invalid', () => {
 
   assert.equal(hasStoredState(storage), false);
   assert.deepEqual(loadState(storage), createInitialState());
+});
+
+test('keeps archived suppliers and products stored for later restoration', () => {
+  const storage = createStorage();
+  const state = {
+    suppliers: [{ id: 'RETIRED', name: 'Retired Supplier', archived: true }],
+    products: [{
+      id: 'old-line',
+      name: 'Retired product',
+      sku: 'JC-OLD',
+      supplierId: 'RETIRED',
+      par: 6,
+      minimum: 2,
+      current: 0,
+      location: 'Archive shelf',
+      unit: 'unit',
+      archived: true,
+    }],
+    usageRecords: [{ id: 'old-usage', productId: 'old-line', amount: 2 }],
+    stocktakes: [],
+  };
+
+  saveState(state, storage, { synced: true });
+
+  const restored = loadState(storage);
+  assert.equal(restored.suppliers[0].archived, true);
+  assert.equal(restored.products[0].archived, true);
+  assert.equal(restored.usageRecords[0].productId, 'old-line');
 });
