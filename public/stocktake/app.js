@@ -77,6 +77,15 @@ let productSupplier = 'all';
 let selectedProductIds = new Set();
 let selectedOrderProductIds = new Set();
 let selectedDeliveryProductIds = new Set();
+let selectedInsightProductIds = new Set();
+const tableSort = {
+  products: { key: 'name', direction: 'asc' },
+  suppliers: { key: 'name', direction: 'asc' },
+  orders: { key: 'status', direction: 'asc' },
+  deliveries: { key: 'orderedAt', direction: 'desc' },
+  insights: { key: 'used', direction: 'desc' },
+  stocktakes: { key: 'completedAt', direction: 'desc' },
+};
 let onlineSaveQueue = Promise.resolve();
 let onlineStorageAvailable = false;
 let onlineUser = null;
@@ -299,6 +308,37 @@ function statusMarkup(product) {
   return `<span class="pill ${labels[status][0]}">${labels[status][1]}</span>`;
 }
 
+function statusSortValue(product) {
+  return { below: 0, low: 1, good: 2 }[productStatusOf(product)] ?? 3;
+}
+
+function sortRows(rows, table, valueFor) {
+  const { key, direction } = tableSort[table];
+  const multiplier = direction === 'asc' ? 1 : -1;
+  return [...rows].sort((left, right) => {
+    const leftValue = valueFor(left, key);
+    const rightValue = valueFor(right, key);
+    if (typeof leftValue === 'number' && typeof rightValue === 'number') return (leftValue - rightValue) * multiplier;
+    return String(leftValue ?? '').localeCompare(String(rightValue ?? ''), undefined, { numeric: true }) * multiplier;
+  });
+}
+
+function sortableHeader(table, key, label) {
+  const sort = tableSort[table];
+  const active = sort.key === key;
+  return `<button class="sort-button${active ? ' active' : ''}" data-sort-table="${table}" data-sort-key="${key}" type="button">${label}<span aria-hidden="true">${active ? (sort.direction === 'asc' ? '↑' : '↓') : '↕'}</span></button>`;
+}
+
+function refreshSortButtons() {
+  $$('[data-sort-table]').forEach((button) => {
+    const sort = tableSort[button.dataset.sortTable];
+    const active = sort?.key === button.dataset.sortKey;
+    button.classList.toggle('active', active);
+    const indicator = button.querySelector('span');
+    if (indicator) indicator.textContent = active ? (sort.direction === 'asc' ? '↑' : '↓') : '↕';
+  });
+}
+
 function getOrders() {
   return state.products
     .filter((product) => product.current < product.minimum && !isOnOrder(product))
@@ -434,7 +474,9 @@ function renderProducts() {
   const supplierSelect = $('#product-supplier-filter');
   supplierSelect.innerHTML = `<option value="all">All suppliers</option>${state.suppliers.slice().sort((a, b) => a.name.localeCompare(b.name)).map((supplier) => `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)} · ${escapeHtml(supplier.id)}</option>`).join('')}`;
   supplierSelect.value = productSupplier;
-  const products = filteredProducts();
+  const products = sortRows(filteredProducts(), 'products', (product, key) => ({
+    name: product.name, current: product.current, status: statusSortValue(product), supplier: supplierName(product), location: product.location, minimum: product.minimum, par: product.par,
+  })[key]);
   const visibleSelected = products.filter((product) => selectedProductIds.has(product.id));
   const selectedCount = selectedProductIds.size;
   $('#product-summary').textContent = `${products.length} of ${state.products.length} products`;
@@ -444,20 +486,24 @@ function renderProducts() {
   selectAll.checked = products.length > 0 && visibleSelected.length === products.length;
   selectAll.indeterminate = visibleSelected.length > 0 && visibleSelected.length < products.length;
   $('#products-table').innerHTML = products.length
-    ? products.map((product) => `<tr><td class="select-cell"><input type="checkbox" data-product-select data-product-id="${product.id}" ${selectedProductIds.has(product.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(product.name)}" /></td><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)}</small></td><td>${escapeHtml(supplierName(product))}<small>${escapeHtml(product.supplierId)}</small></td><td><span class="cell-subtitle">${escapeHtml(product.location)}</span></td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td>${formatQuantity(product, product.minimum)}</td><td>${formatQuantity(product, product.par)}</td><td>${statusMarkup(product)}</td><td class="row-actions"><button class="row-action edit-action" data-action="edit-product" data-product-id="${product.id}">Edit</button><button class="row-action delete-action" data-action="confirm-delete-product" data-product-id="${product.id}">Delete</button></td></tr>`).join('')
+    ? products.map((product) => `<tr><td class="select-cell"><input type="checkbox" data-product-select data-product-id="${product.id}" ${selectedProductIds.has(product.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(product.name)}" /></td><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)}</small></td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td>${statusMarkup(product)}</td><td>${escapeHtml(supplierName(product))}<small>${escapeHtml(product.supplierId)}</small></td><td><span class="cell-subtitle">${escapeHtml(product.location)}</span></td><td>${formatQuantity(product, product.minimum)}</td><td>${formatQuantity(product, product.par)}</td><td class="row-actions"><button class="row-action edit-action" data-action="edit-product" data-product-id="${product.id}">Edit</button><button class="row-action delete-action" data-action="confirm-delete-product" data-product-id="${product.id}">Delete</button></td></tr>`).join('')
     : '<tr><td colspan="9"><div class="order-preview-empty">No products match those filters.</div></td></tr>';
   $('#products-footer').textContent = 'Stock levels update whenever a stocktake is completed.';
 }
 
 function renderStocktakes() {
-  const history = [...state.stocktakes].sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+  const history = sortRows(state.stocktakes, 'stocktakes', (take, key) => ({
+    label: take.label, productCount: take.productCount, type: take.type, completedAt: new Date(take.completedAt).getTime(),
+  })[key]);
   $('#stocktake-history').innerHTML = history.length
-    ? history.slice(0, 8).map((take) => `<div class="history-row"><div><strong>${escapeHtml(take.label)}</strong><small>${take.productCount} product${take.productCount === 1 ? '' : 's'} counted</small></div><span class="history-date">${displayDate(take.completedAt)}</span><span class="pill ${take.type === 'full' ? 'success' : 'neutral'}">${take.type === 'full' ? 'Full count' : take.type === 'supplier' ? 'Supplier' : take.type === 'section' ? 'Section' : 'Quick count'}</span></div>`).join('')
+    ? history.map((take) => `<tr><td><span class="product-name">${escapeHtml(take.label)}</span></td><td class="stock-cell">${take.productCount}</td><td><span class="pill ${take.type === 'full' ? 'success' : 'neutral'}">${take.type === 'full' ? 'Full count' : take.type === 'supplier' ? 'Supplier' : take.type === 'section' ? 'Section' : 'Quick count'}</span></td><td class="stock-cell">${displayDate(take.completedAt)}</td></tr>`).join('')
     : '<div class="order-preview-empty">Your completed stocktakes will appear here.</div>';
 }
 
 function renderOrders() {
-  const orders = getOrders();
+  const orders = sortRows(getOrders(), 'orders', (product, key) => ({
+    name: product.name, current: product.current, status: statusSortValue(product), toOrder: product.toOrder, supplier: product.supplier.name, location: product.location,
+  })[key]);
   const availableIds = new Set(orders.map((product) => product.id));
   selectedOrderProductIds = new Set([...selectedOrderProductIds].filter((id) => availableIds.has(id)));
   const supplierCount = new Set(orders.map((order) => order.supplier.id)).size;
@@ -469,18 +515,13 @@ function renderOrders() {
     $('#supplier-orders').innerHTML = '<div class="no-orders"><strong>No orders needed right now.</strong><span>Low-stock products already on order are available in Deliveries.</span></div>';
     return;
   }
-  const groups = orders.reduce((map, order) => {
-    map[order.supplier.id] = map[order.supplier.id] || { supplier: order.supplier, items: [] };
-    map[order.supplier.id].items.push(order);
-    return map;
-  }, {});
-  $('#supplier-orders').innerHTML = Object.values(groups)
-    .sort((a, b) => a.supplier.name.localeCompare(b.supplier.name))
-    .map(({ supplier, items }) => `<section class="supplier-order"><div class="supplier-head"><div><h3>${escapeHtml(supplier.name)}</h3><p>${escapeHtml(supplier.id)} · ${items.length} line${items.length === 1 ? '' : 's'} ready to order · orders ${escapeHtml(orderDaysLabel(supplier))}</p>${supplier.orderingMethod ? `<small class="supplier-ordering">${escapeHtml(supplier.orderingMethod)}</small>` : ''}</div><span class="supplier-total">${formatNumber(items.reduce((sum, item) => sum + item.toOrder, 0))} units</span></div>${items.map((item) => `<div class="order-item"><input type="checkbox" data-order-select data-product-id="${item.id}" ${selectedOrderProductIds.has(item.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(item.name)} for ordering" /><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.sku)} · ${escapeHtml(item.location)}</small></div><span class="order-optional">Have ${formatQuantity(item, item.current)}</span><span class="order-optional">Par ${formatQuantity(item, item.par)}</span><b>Order ${formatQuantity(item, item.toOrder)}</b></div>`).join('')}</section>`).join('');
+  $('#supplier-orders').innerHTML = `<section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th class="select-cell"></th><th>${sortableHeader('orders', 'name', 'Product')}</th><th>${sortableHeader('orders', 'current', 'Current stock')}</th><th>${sortableHeader('orders', 'status', 'Status')}</th><th>${sortableHeader('orders', 'toOrder', 'Recommended')}</th><th>${sortableHeader('orders', 'supplier', 'Supplier')}</th><th>${sortableHeader('orders', 'location', 'Location')}</th></tr></thead><tbody>${orders.map((item) => `<tr><td class="select-cell"><input type="checkbox" data-order-select data-product-id="${item.id}" ${selectedOrderProductIds.has(item.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(item.name)} for ordering" /></td><td><span class="product-name">${escapeHtml(item.name)}</span><small>${escapeHtml(item.sku)}</small></td><td class="stock-cell">${formatQuantity(item, item.current)}</td><td>${statusMarkup(item)}</td><td class="stock-cell">${formatQuantity(item, item.toOrder)}</td><td>${escapeHtml(item.supplier.name)}<small>${escapeHtml(item.supplier.id)} · ${escapeHtml(orderDaysLabel(item.supplier))}</small></td><td><span class="cell-subtitle">${escapeHtml(item.location)}</span></td></tr>`).join('')}</tbody></table></div><div class="table-footer">Select items, then place the recommended quantity on order.</div></section>`;
 }
 
 function renderDeliveries() {
-  const deliveries = onOrderProducts();
+  const deliveries = sortRows(onOrderProducts(), 'deliveries', (product, key) => ({
+    name: product.name, current: product.current, status: statusSortValue(product), onOrder: onOrderQuantity(product), supplier: supplierName(product), orderedAt: product.onOrderAt || '',
+  })[key]);
   const availableIds = new Set(deliveries.map((product) => product.id));
   selectedDeliveryProductIds = new Set([...selectedDeliveryProductIds].filter((id) => availableIds.has(id)));
   const totalUnits = deliveries.reduce((sum, product) => sum + onOrderQuantity(product), 0);
@@ -493,7 +534,7 @@ function renderDeliveries() {
   selectAll.checked = deliveries.length > 0 && selectedVisible.length === deliveries.length;
   selectAll.indeterminate = selectedVisible.length > 0 && selectedVisible.length < deliveries.length;
   $('#deliveries-table').innerHTML = deliveries.length
-    ? deliveries.map((product) => `<tr><td class="select-cell"><input type="checkbox" data-delivery-select data-product-id="${product.id}" ${selectedDeliveryProductIds.has(product.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(product.name)} as received" /></td><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)} · ${escapeHtml(product.location)}</small></td><td>${escapeHtml(supplierName(product))}<small>${escapeHtml(product.supplierId)}</small></td><td><span class="stock-cell">${formatQuantity(product, onOrderQuantity(product))}</span></td><td>${product.onOrderAt ? displayDate(product.onOrderAt) : 'Not recorded'}</td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td class="row-actions"><button class="row-action delete-action" data-action="cancel-on-order" data-product-id="${product.id}">Cancel order</button></td></tr>`).join('')
+    ? deliveries.map((product) => `<tr><td class="select-cell"><input type="checkbox" data-delivery-select data-product-id="${product.id}" ${selectedDeliveryProductIds.has(product.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(product.name)} as received" /></td><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)} · ${escapeHtml(product.location)}</small></td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td>${statusMarkup(product)}</td><td><span class="stock-cell">${formatQuantity(product, onOrderQuantity(product))}</span></td><td>${escapeHtml(supplierName(product))}<small>${escapeHtml(product.supplierId)}</small></td><td>${product.onOrderAt ? displayDate(product.onOrderAt) : 'Not recorded'}</td><td class="row-actions"><button class="row-action delete-action" data-action="cancel-on-order" data-product-id="${product.id}">Cancel order</button></td></tr>`).join('')
     : '<tr><td colspan="7"><div class="order-preview-empty">Nothing is currently on order.</div></td></tr>';
 }
 
@@ -535,7 +576,9 @@ function cancelOnOrder(product) {
 }
 
 function renderSuppliers() {
-  const suppliers = state.suppliers.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const suppliers = sortRows(state.suppliers, 'suppliers', (supplier, key) => ({
+    name: supplier.name, orderingMethod: supplier.orderingMethod || '', orderDays: orderDaysLabel(supplier), contact: supplier.repContact || '', products: state.products.filter((product) => product.supplierId === supplier.id).length,
+  })[key]);
   $('#supplier-summary').textContent = `${suppliers.length} supplier${suppliers.length === 1 ? '' : 's'} in your order book`;
   $('#suppliers-table').innerHTML = suppliers.length
     ? suppliers.map((supplier) => {
@@ -548,6 +591,10 @@ function renderSuppliers() {
 function renderInsights() {
   const days = Number($('#insight-range').value || 28);
   const usage = state.products.map((product) => ({ ...product, used: usageFor(product.id, days), recent: usageFor(product.id, Math.max(7, days / 2)) }));
+  if (!selectedInsightProductIds.size && usage.length) {
+    [...usage].sort((a, b) => b.used - a.used).slice(0, 5).forEach((product) => selectedInsightProductIds.add(product.id));
+  }
+  selectedInsightProductIds = new Set([...selectedInsightProductIds].filter((id) => usage.some((product) => product.id === id)));
   const total = usage.reduce((sum, product) => sum + product.used, 0);
   const dataPoints = state.usageRecords.filter((record) => new Date(record.recordedAt).getTime() >= Date.now() - days * DAY).length;
   const recommendations = usage.map((product) => ({ product, suggested: suggestedPar(product) })).filter(({ product, suggested }) => Math.abs(suggested - product.par) >= Math.max(product.unit === 'kg' ? .5 : 2, product.par * .15));
@@ -557,19 +604,25 @@ function renderInsights() {
     ['RECOMMENDATIONS', recommendations.length, 'Potential par-level changes', '✦'],
     ['DATA POINTS', dataPoints, 'Stocktake movements stored', '▦'],
   ].map(([label, value, note, icon]) => `<article class="metric"><div class="metric-label"><span>${label}</span><i>${icon}</i></div><strong>${value}</strong><p>${note}</p></article>`).join('');
-  const chartData = [...usage].sort((a, b) => b.used - a.used).slice(0, 8);
-  const chartMax = chartData[0]?.used || 1;
-  $('#usage-chart').innerHTML = chartData.map((product) => `<div class="bar-group"><span class="bar-value">${formatNumber(product.used / (days / 7))}</span><div class="bar" style="height:${Math.max(4, product.used / chartMax * 100)}%" title="${escapeHtml(product.name)}"></div><span class="bar-label">${escapeHtml(product.name)}</span></div>`).join('');
+  const chartData = usage.filter((product) => selectedInsightProductIds.has(product.id));
+  const chartMax = Math.max(1, ...chartData.map((product) => product.used));
+  $('#usage-chart').innerHTML = chartData.length
+    ? chartData.map((product) => `<div class="bar-group"><span class="bar-value">${formatNumber(product.used / (days / 7))}</span><div class="bar" style="height:${Math.max(4, product.used / chartMax * 100)}%" title="${escapeHtml(product.name)}"></div><span class="bar-label">${escapeHtml(product.name)}</span></div>`).join('')
+    : '<div class="chart-empty">Choose one or more products below to graph their usage.</div>';
   $('#recommendations').innerHTML = recommendations.length
     ? recommendations.slice(0, 4).map(({ product, suggested }) => `<article class="recommendation-item"><strong>${escapeHtml(product.name)}</strong><p>${formatQuantity(product, usageFor(product.id, 28))} used in the last 4 weeks. Its current par is ${formatQuantity(product, product.par)}.</p><span class="rec-action">Suggest par: ${formatQuantity(product, suggested)} ${suggested > product.par ? '↑' : '↓'}</span></article>`).join('')
     : '<p class="recommendation-empty">More stocktakes will make recommendations more precise. Nothing needs changing just yet.</p>';
-  $('#usage-table').innerHTML = usage.sort((a, b) => b.used - a.used).map((product) => {
+  const insightRows = usage.map((product) => {
     const firstHalf = usageFor(product.id, Math.max(7, days / 2));
     const totalForTrend = product.used || 0;
     const oldHalf = Math.max(0, totalForTrend - firstHalf);
     const trend = firstHalf > oldHalf * 1.15 ? ['up', '↑ Increasing'] : firstHalf < oldHalf * .85 ? ['down', '↓ Easing'] : ['stable', '→ Steady'];
-    return `<tr><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(supplierName(product))}</small></td><td class="stock-cell">${formatQuantity(product, product.current)}</td><td>${formatQuantity(product, usageFor(product.id, 28))}</td><td>${formatQuantity(product, totalForTrend / (days / 7))}</td><td><span class="trend ${trend[0]}">${trend[1]}</span></td><td class="stock-cell">${formatQuantity(product, suggestedPar(product))}</td></tr>`;
-  }).join('');
+    return { product, trend, weekly: totalForTrend / (days / 7) };
+  });
+  const sortedInsightRows = sortRows(insightRows, 'insights', (row, key) => ({
+    name: row.product.name, current: row.product.current, status: statusSortValue(row.product), used: row.product.used, weekly: row.weekly, trend: row.trend[1], suggested: suggestedPar(row.product),
+  })[key]);
+  $('#usage-table').innerHTML = sortedInsightRows.map(({ product, trend, weekly }) => `<tr><td class="select-cell"><input type="checkbox" data-insight-select data-product-id="${product.id}" ${selectedInsightProductIds.has(product.id) ? 'checked' : ''} aria-label="Graph usage for ${escapeHtml(product.name)}" /></td><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(supplierName(product))}</small></td><td class="stock-cell">${formatQuantity(product, product.current)}</td><td>${statusMarkup(product)}</td><td>${formatQuantity(product, product.used)}</td><td>${formatQuantity(product, weekly)}</td><td><span class="trend ${trend[0]}">${trend[1]}</span></td><td class="stock-cell">${formatQuantity(product, suggestedPar(product))}</td></tr>`).join('');
 }
 
 function renderAll() {
@@ -580,6 +633,7 @@ function renderAll() {
   renderOrders();
   renderDeliveries();
   renderInsights();
+  refreshSortButtons();
 }
 
 function setRoute(route) {
@@ -591,7 +645,19 @@ function setRoute(route) {
   };
   $('#page-eyebrow').textContent = labels[route][0];
   $('#page-title').textContent = labels[route][1];
+  $('#main-navigation')?.classList.remove('mobile-open');
+  const menuToggle = $('.mobile-menu-toggle');
+  if (menuToggle) menuToggle.setAttribute('aria-expanded', 'false');
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function toggleMobileMenu() {
+  const navigation = $('#main-navigation');
+  const menuToggle = $('.mobile-menu-toggle');
+  if (!navigation || !menuToggle) return;
+  const isOpen = navigation.classList.toggle('mobile-open');
+  menuToggle.setAttribute('aria-expanded', String(isOpen));
+  menuToggle.setAttribute('aria-label', isOpen ? 'Close navigation menu' : 'Open navigation menu');
 }
 
 function productForm(product) {
@@ -683,28 +749,101 @@ function startStocktake(type = 'full', group = '') {
   const supplier = supplierById(group);
   const eligible = state.products.filter((product) => type === 'full' || (type === 'low' ? isLowUse(product) : type === 'supplier' ? product.supplierId === group : product.location === group));
   const labels = { full: 'Full stocktake', low: 'Low-use item stocktake', supplier: `${supplier?.name || group} stocktake`, section: `${group} stocktake` };
-  modal(labels[type], `${eligible.length} product${eligible.length === 1 ? '' : 's'} to count. Leave a field unchanged to keep the recorded level.`, `
-    <div class="count-summary"><strong>Count today’s stock</strong><span>${eligible.length} lines</span></div>
-    <input class="count-search" id="count-search" type="search" placeholder="Find a product to count" />
-    <form id="stocktake-form"><div class="count-list" id="count-list">${eligible.map((product) => `<label class="count-row" data-count-name="${escapeHtml(`${product.name} ${product.sku} ${product.location}`.toLowerCase())}"><span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.location)} · Recorded ${formatQuantity(product, product.current)}</small></span><input type="number" step="0.1" min="0" name="count-${product.id}" value="${product.current}" aria-label="Count for ${escapeHtml(product.name)}" /></label>`).join('')}</div></form>
-  `, `<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" form="stocktake-form" type="submit">Complete stocktake</button>`);
-  $('#count-search').addEventListener('input', (event) => {
-    const query = event.target.value.toLowerCase();
-    $$('#count-list .count-row').forEach((row) => { row.hidden = !row.dataset.countName.includes(query); });
-  });
-  $('#stocktake-form').addEventListener('submit', (event) => {
-    event.preventDefault();
-    const values = new FormData(event.currentTarget);
+  if (!eligible.length) {
+    toast('There are no products in this stocktake.');
+    return;
+  }
+
+  let currentIndex = 0;
+  const counts = new Map();
+
+  modal(labels[type], 'Count one product at a time. Leave a value blank to keep the recorded stock.', `
+    <div class="mobile-stocktake">
+      <div class="stocktake-step-meta"><span id="stocktake-step-label"></span><span id="stocktake-step-progress"></span></div>
+      <div class="stocktake-step-bar"><span id="stocktake-step-bar"></span></div>
+      <div id="stocktake-step"></div>
+    </div>
+  `, `<button class="button secondary" data-action="close-modal">Cancel</button><button class="button secondary" id="stocktake-back" type="button">Back</button><button class="button primary" id="stocktake-next" type="button">Next</button>`);
+
+  function saveCurrentValue() {
+    const input = $('#stocktake-quantity');
+    if (input) counts.set(eligible[currentIndex].id, input.value);
+  }
+
+  function renderStep() {
+    const product = eligible[currentIndex];
+    const value = counts.get(product.id) ?? '';
+    $('#stocktake-step-label').textContent = `Product ${currentIndex + 1} of ${eligible.length}`;
+    $('#stocktake-step-progress').textContent = `${Math.round(((currentIndex + 1) / eligible.length) * 100)}% complete`;
+    $('#stocktake-step-bar').style.width = `${((currentIndex + 1) / eligible.length) * 100}%`;
+    $('#stocktake-step').innerHTML = `
+      <div class="mobile-count-card">
+        <p class="kicker">COUNT THIS ITEM</p>
+        <h3>${escapeHtml(product.name)}</h3>
+        <p class="mobile-count-detail">${escapeHtml(product.sku)} · ${escapeHtml(product.location)}</p>
+        <div class="mobile-count-current"><span>Current stock</span><strong>${formatQuantity(product, product.current)}</strong></div>
+        <label class="mobile-count-input-label" for="stocktake-quantity">New stock</label>
+        <input id="stocktake-quantity" class="mobile-count-input" type="text" inputmode="decimal" autocomplete="off" placeholder="Type count" value="${escapeHtml(value)}" aria-label="New stock count for ${escapeHtml(product.name)}" />
+        <div class="stocktake-keypad" id="stocktake-keypad" aria-label="Number keypad">
+          ${['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'backspace'].map((key) => `<button type="button" data-key="${key}" aria-label="${key === 'backspace' ? 'Delete last digit' : key}">${key === 'backspace' ? '⌫' : key}</button>`).join('')}
+        </div>
+        <p class="mobile-count-note">Leave blank to keep the current stock level.</p>
+      </div>`;
+    $('#stocktake-back').disabled = currentIndex === 0;
+    $('#stocktake-next').textContent = currentIndex === eligible.length - 1 ? 'Complete stocktake' : 'Next';
+
+    $('#stocktake-quantity').addEventListener('input', saveCurrentValue);
+    $('#stocktake-keypad').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-key]');
+      if (!button) return;
+      const input = $('#stocktake-quantity');
+      const key = button.dataset.key;
+      let nextValue = input.value;
+      if (key === 'backspace') nextValue = nextValue.slice(0, -1);
+      else if (key === '.' && !nextValue.includes('.')) nextValue = nextValue ? `${nextValue}.` : '0.';
+      else if (key !== '.') nextValue += key;
+      input.value = nextValue;
+      saveCurrentValue();
+      input.focus();
+    });
+    requestAnimationFrame(() => $('#stocktake-quantity')?.focus());
+  }
+
+  function completeStocktake() {
     eligible.forEach((product) => {
+      const rawValue = counts.get(product.id) ?? '';
       const before = product.current;
-      const after = cleanNumber(values.get(`count-${product.id}`), before);
+      const after = rawValue.trim() === '' ? before : cleanNumber(rawValue, before);
       const consumed = Math.max(0, before - after);
       product.current = after;
       if (consumed > 0) state.usageRecords.push({ id: `u-${Date.now()}-${product.id}`, productId: product.id, amount: consumed, recordedAt: new Date().toISOString(), source: 'stocktake' });
     });
     state.stocktakes.unshift({ id: `st-${Date.now()}`, type, label: labels[type], productCount: eligible.length, completedAt: new Date().toISOString() });
     persist(); renderAll(); closeModal(); setRoute('dashboard'); toast('Stocktake complete. Levels and usage have been saved.');
+  }
+
+  $('#stocktake-back').addEventListener('click', () => {
+    saveCurrentValue();
+    if (currentIndex > 0) {
+      currentIndex -= 1;
+      renderStep();
+    }
   });
+  $('#stocktake-next').addEventListener('click', () => {
+    saveCurrentValue();
+    const value = counts.get(eligible[currentIndex].id) ?? '';
+    if (value.trim() !== '' && (!Number.isFinite(Number(value)) || Number(value) < 0)) {
+      toast('Enter a valid stock quantity.');
+      return;
+    }
+    if (currentIndex < eligible.length - 1) {
+      currentIndex += 1;
+      renderStep();
+      return;
+    }
+    completeStocktake();
+  });
+  renderStep();
 }
 
 function chooseSupplierTake() {
@@ -925,6 +1064,7 @@ document.addEventListener('click', (event) => {
     'show-help': showHelp,
     'show-account': showAccount,
     'sign-out': signOut,
+    'toggle-mobile-menu': toggleMobileMenu,
     'show-notifications': () => toast(getOrders().length ? `${getOrders().length} products need an order today.` : 'No stock alerts right now.'),
   };
   actions[action.dataset.action]?.();
@@ -956,10 +1096,24 @@ document.addEventListener('change', (event) => {
     else selectedDeliveryProductIds.delete(target.dataset.productId);
     renderDeliveries();
   }
+  if (target.matches('[data-insight-select]')) {
+    if (target.checked) selectedInsightProductIds.add(target.dataset.productId);
+    else selectedInsightProductIds.delete(target.dataset.productId);
+    renderInsights();
+  }
   if (target.id === 'select-all-deliveries') {
     onOrderProducts().forEach((product) => target.checked ? selectedDeliveryProductIds.add(product.id) : selectedDeliveryProductIds.delete(product.id));
     renderDeliveries();
   }
+});
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-sort-table]');
+  if (!button) return;
+  const sort = tableSort[button.dataset.sortTable];
+  if (!sort) return;
+  sort.direction = sort.key === button.dataset.sortKey && sort.direction === 'asc' ? 'desc' : 'asc';
+  sort.key = button.dataset.sortKey;
+  renderAll();
 });
 $('#insight-range').addEventListener('change', renderInsights);
 $('#bulk-upload').addEventListener('change', (event) => { handleUpload(event.target.files[0]); event.target.value = ''; });
