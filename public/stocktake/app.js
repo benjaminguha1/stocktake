@@ -77,6 +77,7 @@ let productSupplier = 'all';
 let selectedProductIds = new Set();
 let selectedOrderProductIds = new Set();
 let selectedDeliveryProductIds = new Set();
+let orderQuantityOverrides = new Map();
 let selectedInsightProductIds = new Set();
 const tableSort = {
   products: { key: 'name', direction: 'asc' },
@@ -469,25 +470,16 @@ function filteredProducts() {
 }
 
 function renderProducts() {
-  const activeIds = new Set(state.products.map((product) => product.id));
-  selectedProductIds = new Set([...selectedProductIds].filter((id) => activeIds.has(id)));
   const supplierSelect = $('#product-supplier-filter');
   supplierSelect.innerHTML = `<option value="all">All suppliers</option>${state.suppliers.slice().sort((a, b) => a.name.localeCompare(b.name)).map((supplier) => `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)} · ${escapeHtml(supplier.id)}</option>`).join('')}`;
   supplierSelect.value = productSupplier;
   const products = sortRows(filteredProducts(), 'products', (product, key) => ({
     name: product.name, current: product.current, status: statusSortValue(product), supplier: supplierName(product), location: product.location, minimum: product.minimum, par: product.par,
   })[key]);
-  const visibleSelected = products.filter((product) => selectedProductIds.has(product.id));
-  const selectedCount = selectedProductIds.size;
   $('#product-summary').textContent = `${products.length} of ${state.products.length} products`;
-  $('#product-bulk-actions').hidden = selectedCount === 0;
-  $('#selected-product-count').textContent = `${selectedCount} selected`;
-  const selectAll = $('#select-all-products');
-  selectAll.checked = products.length > 0 && visibleSelected.length === products.length;
-  selectAll.indeterminate = visibleSelected.length > 0 && visibleSelected.length < products.length;
   $('#products-table').innerHTML = products.length
-    ? products.map((product) => `<tr><td class="select-cell"><input type="checkbox" data-product-select data-product-id="${product.id}" ${selectedProductIds.has(product.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(product.name)}" /></td><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)}</small></td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td>${statusMarkup(product)}</td><td>${escapeHtml(supplierName(product))}<small>${escapeHtml(product.supplierId)}</small></td><td><span class="cell-subtitle">${escapeHtml(product.location)}</span></td><td>${formatQuantity(product, product.minimum)}</td><td>${formatQuantity(product, product.par)}</td><td class="row-actions"><button class="row-action edit-action" data-action="edit-product" data-product-id="${product.id}">Edit</button><button class="row-action delete-action" data-action="confirm-delete-product" data-product-id="${product.id}">Delete</button></td></tr>`).join('')
-    : '<tr><td colspan="9"><div class="order-preview-empty">No products match those filters.</div></td></tr>';
+    ? products.map((product) => `<tr><td><span class="product-name">${escapeHtml(product.name)}</span><small>${escapeHtml(product.sku)}</small></td><td><span class="stock-cell">${formatQuantity(product, product.current)}</span></td><td>${statusMarkup(product)}</td><td>${escapeHtml(supplierName(product))}<small>${escapeHtml(product.supplierId)}</small></td><td><span class="cell-subtitle">${escapeHtml(product.location)}</span></td><td>${formatQuantity(product, product.minimum)}</td><td>${formatQuantity(product, product.par)}</td><td class="row-actions"><button class="row-action edit-action" data-action="edit-product" data-product-id="${product.id}">Edit</button></td></tr>`).join('')
+    : '<tr><td colspan="8"><div class="order-preview-empty">No products match those filters.</div></td></tr>';
   $('#products-footer').textContent = 'Stock levels update whenever a stocktake is completed.';
 }
 
@@ -501,10 +493,12 @@ function renderStocktakes() {
 }
 
 function renderOrders() {
-  const orders = sortRows(getOrders(), 'orders', (product, key) => ({
+  const availableOrders = getOrders();
+  const availableIds = new Set(availableOrders.map((product) => product.id));
+  orderQuantityOverrides = new Map([...orderQuantityOverrides].filter(([id]) => availableIds.has(id)));
+  const orders = sortRows(availableOrders.map((product) => ({ ...product, toOrder: orderQuantityOverrides.get(product.id) ?? product.toOrder })), 'orders', (product, key) => ({
     name: product.name, current: product.current, status: statusSortValue(product), toOrder: product.toOrder, supplier: product.supplier.name, location: product.location,
   })[key]);
-  const availableIds = new Set(orders.map((product) => product.id));
   selectedOrderProductIds = new Set([...selectedOrderProductIds].filter((id) => availableIds.has(id)));
   const supplierCount = new Set(orders.map((order) => order.supplier.id)).size;
   const totalUnits = orders.reduce((sum, order) => sum + order.toOrder, 0);
@@ -515,7 +509,7 @@ function renderOrders() {
     $('#supplier-orders').innerHTML = '<div class="no-orders"><strong>No orders needed right now.</strong><span>Low-stock products already on order are available in Deliveries.</span></div>';
     return;
   }
-  $('#supplier-orders').innerHTML = `<section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th class="select-cell"></th><th>${sortableHeader('orders', 'name', 'Product')}</th><th>${sortableHeader('orders', 'current', 'Current stock')}</th><th>${sortableHeader('orders', 'status', 'Status')}</th><th>${sortableHeader('orders', 'toOrder', 'Recommended')}</th><th>${sortableHeader('orders', 'supplier', 'Supplier')}</th><th>${sortableHeader('orders', 'location', 'Location')}</th></tr></thead><tbody>${orders.map((item) => `<tr><td class="select-cell"><input type="checkbox" data-order-select data-product-id="${item.id}" ${selectedOrderProductIds.has(item.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(item.name)} for ordering" /></td><td><span class="product-name">${escapeHtml(item.name)}</span><small>${escapeHtml(item.sku)}</small></td><td class="stock-cell">${formatQuantity(item, item.current)}</td><td>${statusMarkup(item)}</td><td class="stock-cell">${formatQuantity(item, item.toOrder)}</td><td>${escapeHtml(item.supplier.name)}<small>${escapeHtml(item.supplier.id)} · ${escapeHtml(orderDaysLabel(item.supplier))}</small></td><td><span class="cell-subtitle">${escapeHtml(item.location)}</span></td></tr>`).join('')}</tbody></table></div><div class="table-footer">Select items, then place the recommended quantity on order.</div></section>`;
+  $('#supplier-orders').innerHTML = `<section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th class="select-cell"></th><th>${sortableHeader('orders', 'name', 'Product')}</th><th>${sortableHeader('orders', 'current', 'Current stock')}</th><th>${sortableHeader('orders', 'status', 'Status')}</th><th>${sortableHeader('orders', 'toOrder', 'Order quantity')}</th><th>${sortableHeader('orders', 'supplier', 'Supplier')}</th><th>${sortableHeader('orders', 'location', 'Location')}</th></tr></thead><tbody>${orders.map((item) => `<tr><td class="select-cell"><input type="checkbox" data-order-select data-product-id="${item.id}" ${selectedOrderProductIds.has(item.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(item.name)} for ordering" /></td><td><span class="product-name">${escapeHtml(item.name)}</span><small>${escapeHtml(item.sku)}</small></td><td class="stock-cell">${formatQuantity(item, item.current)}</td><td>${statusMarkup(item)}</td><td><label class="order-quantity"><span class="sr-only">Order quantity for ${escapeHtml(item.name)}</span><input type="number" min="0" step="0.1" data-order-quantity data-product-id="${item.id}" value="${item.toOrder}" /></label></td><td>${escapeHtml(item.supplier.name)}<small>${escapeHtml(item.supplier.id)} · ${escapeHtml(orderDaysLabel(item.supplier))}</small></td><td><span class="cell-subtitle">${escapeHtml(item.location)}</span></td></tr>`).join('')}</tbody></table></div><div class="table-footer">Adjust a quantity when you want to order above or below the recommendation, then select the products to place on order.</div></section>`;
 }
 
 function renderDeliveries() {
@@ -539,13 +533,15 @@ function renderDeliveries() {
 }
 
 function placeSelectedOnOrder() {
-  const orders = getOrders().filter((product) => selectedOrderProductIds.has(product.id));
+  const orders = getOrders().filter((product) => selectedOrderProductIds.has(product.id)).map((product) => ({ ...product, toOrder: orderQuantityOverrides.get(product.id) ?? product.toOrder }));
   if (!orders.length) return toast('Select one or more products before placing an order.');
+  if (orders.some((order) => !Number.isFinite(Number(order.toOrder)) || Number(order.toOrder) <= 0)) return toast('Each selected product needs an order quantity greater than zero.');
   const orderedAt = new Date().toISOString();
   orders.forEach((order) => {
     const product = state.products.find((item) => item.id === order.id);
     product.onOrderQuantity = order.toOrder;
     product.onOrderAt = orderedAt;
+    orderQuantityOverrides.delete(product.id);
   });
   selectedOrderProductIds.clear();
   persist(); renderAll(); setRoute('deliveries');
@@ -677,7 +673,8 @@ function productForm(product) {
       <div class="field"><label for="product-unit">Unit</label><input id="product-unit" name="unit" value="${escapeHtml(item.unit)}" required maxlength="32" placeholder="e.g. carton, kg, cup" /></div>
       <div class="field full"><label for="product-location">Location</label><input id="product-location" name="location" value="${escapeHtml(item.location)}" required maxlength="80" placeholder="e.g. Dry store · A2" /></div>
     </form>
-  `, `<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" form="product-form" type="submit">${product ? 'Save changes' : 'Add product'}</button>`);
+  `, `${product ? '<button class="button destructive editor-delete" id="delete-product-from-editor" type="button">Delete product</button>' : ''}<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" form="product-form" type="submit">${product ? 'Save changes' : 'Add product'}</button>`);
+  if (product) $('#delete-product-from-editor').addEventListener('click', () => confirmDeleteProducts([product.id]));
   $('#product-form').addEventListener('submit', (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -1087,6 +1084,16 @@ document.addEventListener('change', (event) => {
   if (target.matches('[data-order-select]')) {
     if (target.checked) selectedOrderProductIds.add(target.dataset.productId);
     else selectedOrderProductIds.delete(target.dataset.productId);
+    renderOrders();
+  }
+  if (target.matches('[data-order-quantity]')) {
+    const quantity = Number(target.value);
+    if (!Number.isFinite(quantity) || quantity < 0) {
+      toast('Enter an order quantity of zero or more.');
+      renderOrders();
+      return;
+    }
+    orderQuantityOverrides.set(target.dataset.productId, quantity);
     renderOrders();
   }
   if (target.matches('[data-delivery-select]')) {
