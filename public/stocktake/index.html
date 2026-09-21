@@ -9,8 +9,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="counting.css" />
+    <link rel="stylesheet" href="orders.css" />
+    <link rel="stylesheet" href="staff-home.css" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="app.js" type="module"></script>
+    <script src="easy-access.js" type="module"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -23,12 +27,14 @@
 
         <nav class="main-nav" id="main-navigation" aria-label="Main navigation">
           <button class="nav-item active" data-route="dashboard"><span class="nav-icon">⌂</span>Overview</button>
-          <button class="nav-item" data-route="products"><span class="nav-icon">▦</span>Products <span class="nav-count" id="product-count">0</span></button>
-          <button class="nav-item" data-route="suppliers"><span class="nav-icon">⌁</span>Suppliers</button>
           <button class="nav-item" data-route="stocktake"><span class="nav-icon">✓</span>Stocktake</button>
           <button class="nav-item" data-route="orders"><span class="nav-icon">↗</span>Order list <span class="nav-count warning" id="order-count">0</span></button>
           <button class="nav-item" data-route="deliveries"><span class="nav-icon">□</span>Deliveries <span class="nav-count" id="delivery-count">0</span></button>
-          <button class="nav-item" data-route="insights"><span class="nav-icon">◔</span>Usage insights</button>
+          <details class="secondary-nav"><summary>Manage and reports</summary><div>
+            <button class="nav-item" data-route="products"><span class="nav-icon">▦</span>Products <span class="nav-count" id="product-count">0</span></button>
+            <button class="nav-item" data-route="suppliers"><span class="nav-icon">⌁</span>Suppliers</button>
+            <button class="nav-item" data-route="insights"><span class="nav-icon">◔</span>Usage insights</button>
+          </div></details>
         </nav>
 
         <div class="sidebar-footer">
@@ -42,22 +48,27 @@
           <div class="topbar-actions">
             <span class="save-status" id="save-status" data-state="connecting"><i aria-hidden="true"></i><span id="save-status-text">Connecting online…</span></span>
             <span class="today" id="today-label"></span>
+            <button class="easy-access-trigger" type="button" aria-haspopup="dialog">Easy access</button>
             <button class="icon-button" data-action="show-notifications" aria-label="Notifications"><span>♧</span><i></i></button>
             <button class="avatar" id="account-button" data-action="show-account" aria-label="Account">JG</button>
           </div>
         </header>
 
         <section id="dashboard" class="view active" data-view="dashboard">
-          <div class="hero-row">
-            <div><p class="kicker">TUESDAY CHECK-IN</p><h2>Your stock, at a glance.</h2><p class="muted">A quiet stockroom makes for a smooth service.</p></div>
-            <button class="button primary" data-action="start-stocktake"><span>+</span> Start a stocktake</button>
+          <div class="hero-row staff-home-hero">
+            <div><p class="kicker" id="check-in-label">TODAY’S CHECK-IN</p><h2>Your stock, at a glance.</h2><p class="muted">A quiet stockroom makes for a smooth service.</p></div>
           </div>
 
-          <nav class="dashboard-quick-links" aria-label="Quick actions">
-            <button class="quick-link" data-route="stocktake"><span class="quick-link-icon">✓</span><span><strong>Stocktake</strong><small>Count stock now</small></span><b>→</b></button>
-            <button class="quick-link" data-route="deliveries"><span class="quick-link-icon">□</span><span><strong>On order</strong><small>Receive deliveries</small></span><b>→</b></button>
-            <button class="quick-link" data-route="insights"><span class="quick-link-icon">◔</span><span><strong>Usage insights</strong><small>Review product movement</small></span><b>→</b></button>
+          <nav class="dashboard-quick-links staff-primary-actions" aria-label="Staff actions">
+            <button class="quick-link" data-action="start-stocktake"><span class="quick-link-icon">✓</span><span><strong>Count stock</strong><small>Start today’s count</small></span><b>→</b></button>
+            <button class="quick-link" data-route="deliveries"><span class="quick-link-icon">□</span><span><strong>Receive delivery</strong><small>Add incoming stock</small></span><b>→</b></button>
+            <button class="quick-link" data-route="orders"><span class="quick-link-icon">!</span><span><strong>Check what’s needed</strong><small>See items to order</small></span><b>→</b></button>
           </nav>
+
+          <section class="staff-home-panels">
+            <div class="panel staff-resume" id="resume-count-slot"><p class="kicker">YOUR NEXT COUNT</p><h3>Ready when you are</h3><p class="muted">Start a count to keep today’s stock accurate.</p></div>
+            <div class="panel staff-handover" id="staff-handover"><p class="kicker">STAFF HANDOVER</p><h3>Nothing to hand over yet</h3><p class="muted">Notes from the previous shift will appear here.</p></div>
+          </section>
 
           <div class="metric-grid" id="metrics"></div>
 
@@ -67,7 +78,7 @@
               <div class="order-preview" id="order-preview"></div>
             </section>
             <section class="panel stocktake-card">
-              <div class="panel-heading"><div><p class="kicker">LAST CHECK</p><h3>Stocktake rhythm</h3></div><span class="pill success">On track</span></div>
+              <div class="panel-heading"><div><p class="kicker">LAST CHECK</p><h3>Stocktake rhythm</h3></div><span class="pill success" id="stocktake-health">On track</span></div>
               <div class="stocktake-stat"><strong id="days-since-stocktake">—</strong><span>days since your last<br />full stocktake</span></div>
               <div class="progress-meta"><span>Weekly rhythm</span><strong id="stocktake-rhythm">0 / 1 complete</strong></div>
               <div class="progress"><span id="stocktake-progress"></span></div>
@@ -98,7 +109,7 @@
 
         <section id="stocktake" class="view" data-view="stocktake">
           <div class="view-header"><div><p class="kicker">COUNT WITH CONFIDENCE</p><h2>Stocktake</h2><p class="muted">Count what matters today. We’ll capture the rest.</p></div><button class="button primary" data-action="start-stocktake"><span>+</span> New stocktake</button></div>
-          <div class="stocktake-options">
+          <div class="stocktake-options" id="section-count-shortcuts">
             <button class="take-option" data-action="start-stocktake" data-take-type="full"><span class="take-icon">▦</span><span><strong>Full stocktake</strong><small>Count every active product</small></span><b>→</b></button>
             <button class="take-option" data-action="start-stocktake" data-take-type="low"><span class="take-icon">↓</span><span><strong>Low-use items</strong><small>Quick count for items with little movement</small></span><b>→</b></button>
             <button class="take-option" data-action="choose-section-take"><span class="take-icon">⌑</span><span><strong>By section</strong><small>Count one area, such as the front bar</small></span><b>→</b></button>

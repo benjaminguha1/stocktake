@@ -8,6 +8,8 @@ export function createInitialState() {
     products: [],
     usageRecords: [],
     stocktakes: [],
+    orderHistory: [],
+    deliveryReceipts: [],
   };
 }
 
@@ -64,6 +66,7 @@ export function normaliseState(value) {
       orderDays: String(candidate.orderDays || '').trim(),
       repContact: String(candidate.repContact || '').trim(),
       notes: String(candidate.notes || '').trim(),
+      ...(candidate.archived ? { archived: true } : {}),
     };
     suppliers.push(supplier);
     return supplier;
@@ -94,6 +97,8 @@ export function normaliseState(value) {
       current: cleanNumber(product.current),
       location: String(product.location || 'Unassigned location').trim(),
       unit: String(product.unit || 'unit').trim(),
+      ...(product.archived ? { archived: true } : {}),
+      ...(Number.isFinite(product.shelfOrder) ? { shelfOrder: product.shelfOrder } : {}),
       onOrderQuantity,
       onOrderAt: onOrderQuantity ? String(product.onOrderAt || '').trim() : '',
     };
@@ -104,6 +109,8 @@ export function normaliseState(value) {
     products,
     usageRecords: Array.isArray(value.usageRecords) ? value.usageRecords : [],
     stocktakes: Array.isArray(value.stocktakes) ? value.stocktakes : [],
+    orderHistory: Array.isArray(value.orderHistory) ? value.orderHistory : [],
+    deliveryReceipts: Array.isArray(value.deliveryReceipts) ? value.deliveryReceipts : [],
   };
 }
 
