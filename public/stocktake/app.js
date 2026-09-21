@@ -979,7 +979,7 @@ async function startStocktake(type = 'full', group = '', options = {}) {
       <div class="count-jump"><select id="stocktake-jump" aria-label="Jump to a product"></select><button class="button secondary" id="stocktake-jump-button" type="button">Jump</button></div>
       <div id="stocktake-step"></div>
     </div>
-  `, '<button class="button secondary" id="stocktake-save-exit" type="button">Save and exit</button><button class="button secondary" id="stocktake-back" type="button">Back</button><button class="button primary" id="stocktake-next" type="button">Next</button>');
+  `, '<button class="button secondary" id="stocktake-save-exit" type="button">Save and exit</button><button class="button secondary" id="stocktake-back" type="button">Back</button><button class="button secondary" id="count-skip" type="button">Skip</button><button class="button primary" id="stocktake-next" type="button">Next</button>');
 
   function saveDraft() {
     draft.currentIndex = currentIndex;
@@ -1018,7 +1018,7 @@ async function startStocktake(type = 'full', group = '', options = {}) {
       $('#stocktake-step').innerHTML = `<div class="mobile-count-card"><p class="kicker count-missing">PRODUCT REMOVED</p><h3>${escapeHtml(product.name)}</h3><p class="mobile-count-detail">${escapeHtml(product.sku)} · ${escapeHtml(product.location)}</p><p class="mobile-count-note">This product is no longer in the shared product list. It will be recorded as skipped.</p><button class="button secondary" id="skip-removed-product" type="button">Skip removed product</button></div>`;
       $('#skip-removed-product').addEventListener('click', () => { setDecision('skipped'); renderStep(); });
     } else {
-      const value = entry.decision === 'counted' ? entry.value ?? '' : '';
+      const value = entry.decision === 'counted' ? entry.value ?? '' : entry.decision === 'out' ? '0' : entry.decision === 'same' ? String(product.recorded) : '';
       $('#stocktake-step').innerHTML = `
         <div class="mobile-count-card">
           <p class="kicker">COUNT THIS ITEM</p><h3>${escapeHtml(product.name)}</h3>
@@ -1028,15 +1028,11 @@ async function startStocktake(type = 'full', group = '', options = {}) {
           <input id="stocktake-quantity" class="mobile-count-input" type="text" inputmode="decimal" autocomplete="off" placeholder="Type count" value="${escapeHtml(value)}" aria-label="Counted ${escapeHtml(product.unit)} for ${escapeHtml(product.name)}" />
           <span class="count-unit">${escapeHtml(product.unit)}</span>
           <div class="stocktake-keypad" id="stocktake-keypad" aria-label="Number keypad">${['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'backspace'].map((key) => `<button type="button" data-key="${key}" aria-label="${key === 'backspace' ? 'Delete last digit' : key}">${key === 'backspace' ? '⌫' : key}</button>`).join('')}</div>
-          <div class="count-decision-grid"><button class="button secondary ${entry.decision === 'same' ? 'selected' : ''}" id="count-same" type="button">Same as recorded</button><button class="button secondary ${entry.decision === 'out' ? 'selected' : ''}" id="count-out" type="button">Out of stock</button><button class="button secondary ${entry.decision === 'skipped' ? 'selected' : ''}" id="count-skip" type="button">Skip</button></div>
-          <p class="mobile-count-note">Skipped products stay unchanged and do not count as completed.</p>
+          <p class="mobile-count-note">Leave blank to skip. Enter 0 for no stock.</p>
         </div>`;
       const input = $('#stocktake-quantity');
-      const saveInput = () => setDecision('counted', input.value);
+      const saveInput = () => setDecision(input.value.trim() === '' ? 'skipped' : 'counted', input.value);
       input.addEventListener('input', saveInput);
-      $('#count-same').addEventListener('click', () => { setDecision('same'); renderStep(); });
-      $('#count-out').addEventListener('click', () => { setDecision('out'); renderStep(); });
-      $('#count-skip').addEventListener('click', () => { setDecision('skipped'); renderStep(); });
       $('#stocktake-keypad').addEventListener('click', (event) => {
         const button = event.target.closest('[data-key]');
         if (!button) return;
@@ -1050,7 +1046,7 @@ async function startStocktake(type = 'full', group = '', options = {}) {
       });
     }
     $('#stocktake-back').disabled = currentIndex === 0;
-    $('#stocktake-next').textContent = currentIndex === draft.products.length - 1 ? 'Review stocktake' : 'Next';
+    $('#stocktake-next').textContent = currentIndex === draft.products.length - 1 ? 'Review' : 'Next';
   }
 
   function reviewStocktake() {
@@ -1062,6 +1058,11 @@ async function startStocktake(type = 'full', group = '', options = {}) {
       toast(`${changedIds.length} recorded level${changedIds.length === 1 ? ' changed' : 's changed'} while this draft was open. Count ${changedIds.length === 1 ? 'it' : 'them'} again.`);
       return;
     }
+    draft.products.forEach(product => {
+      const entry = draft.entries[product.id];
+      if (!entry || (entry.decision === 'counted' && String(entry.value ?? '').trim() === '')) draft.entries[product.id] = { decision: 'skipped' };
+    });
+    saveDraft();
     const summary = workflow.countDraftSummary(draft, currentProducts.map((item) => item.id));
     if (summary.pending) {
       const firstPending = draft.products.findIndex((product) => {
@@ -1140,8 +1141,12 @@ async function startStocktake(type = 'full', group = '', options = {}) {
   $('#stocktake-back').addEventListener('click', () => { if (currentIndex > 0) { currentIndex -= 1; saveDraft(); renderStep(); } });
   $('#stocktake-next').addEventListener('click', () => {
     const entry = draft.entries[draft.products[currentIndex].id];
-    if (entry?.decision === 'counted' && !workflow.validateCount(entry.value).valid) return toast('Enter a valid stock quantity, or choose another option.');
-    if (!entry) return toast('Enter a count, or choose Same as recorded, Out of stock, or Skip.');
+    if (entry?.decision === 'counted' && String(entry.value ?? '').trim() !== '' && !workflow.validateCount(entry.value).valid) return toast('Enter a valid quantity, or leave blank to skip.');
+    if (!entry || (entry.decision === 'counted' && String(entry.value ?? '').trim() === '')) setDecision('skipped');
+    if (currentIndex < draft.products.length - 1) { currentIndex += 1; saveDraft(); renderStep(); } else reviewStocktake();
+  });
+  $('#count-skip').addEventListener('click', () => {
+    setDecision('skipped');
     if (currentIndex < draft.products.length - 1) { currentIndex += 1; saveDraft(); renderStep(); } else reviewStocktake();
   });
   $('#stocktake-jump-button').addEventListener('click', () => { currentIndex = Number($('#stocktake-jump').value); saveDraft(); renderStep(); });

@@ -49,7 +49,7 @@ Open the project in Codex Sites and ask it to prepare and publish the current ap
 - Home highlights counting, receiving deliveries, and checking what needs ordering. Reports and stock setup remain available in the secondary navigation.
 - Start with a shelf/section count. A product's optional shelf position controls counting order within its location.
 - Counts save a draft on the current device for the current signed-in user. Use **Save and exit** and **Resume** when interrupted. Drafts are not shared between devices.
-- Choose a quantity, **Same as recorded**, **Out of stock**, or **Skip** for each item. Review changes before saving. Skipped items do not update stock or count toward a completed full stocktake.
+- Enter a quantity (including **0** for no stock), or leave it blank and tap **Next** to skip. **Skip** also advances immediately. Review changes before saving. Skipped items do not update stock or count toward a completed full stocktake.
 - Today's handover shows which sections have been checked and which still need counting.
 - Review order quantities, copy the supplier order, send it through the usual supplier channel, then choose **I've sent this order**. Stocktake does not contact suppliers automatically.
 - Receive the quantity that actually arrived. Shortages stay on order unless explicitly closed. The immediate receipt confirmation offers an undo, provided the affected stock has not changed.

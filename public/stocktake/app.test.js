@@ -32,7 +32,11 @@ test('staff can resume a count, skip an item, receive a shortage, undo and archi
     assert.equal(saved().products[0].current,4,'draft must not change live stock');
     click('[data-resume-count-draft]'); await pause();
     assert.equal(document.querySelector('#stocktake-quantity').value,'3');
-    click('#stocktake-next'); click('#count-skip'); click('#stocktake-next');
+    click('#stocktake-next');
+    assert.equal(document.querySelector('#count-same'), null);
+    assert.equal(document.querySelector('#count-out'), null);
+    assert.ok(document.querySelector('#count-skip').closest('.modal-footer'));
+    click('#count-skip');
     assert.match(document.querySelector('#modal').textContent,/Skipped/);
     click('#confirm-stocktake'); await pause();
     assert.equal(saved().products[0].current,3);
@@ -69,5 +73,14 @@ test('staff can resume a count, skip an item, receive a shortage, undo and archi
     click('[data-action="toggle-supplier-archive"][data-supplier-id="TEST"]');
     assert.ok(!saved().suppliers[0].archived);
     assert.match(document.querySelector('#order-preview').textContent,/Beans/);
+    click('[data-count-section="Shelf"]'); await pause();
+    click('#stocktake-next');
+    set('#stocktake-quantity','-2'); click('#stocktake-next');
+    assert.ok(document.querySelector('#stocktake-quantity'),'negative input must not advance');
+    set('#stocktake-quantity','0'); click('#stocktake-next'); click('#confirm-stocktake'); await pause();
+    assert.equal(saved().products[0].current,3,'blank entry leaves stock unchanged');
+    assert.equal(saved().products[1].current,0,'zero is an explicit count');
+    assert.deepEqual(saved().stocktakes[0].skippedProductIds,['a']);
+    assert.deepEqual(saved().stocktakes[0].countedProductIds,['b']);
   } finally { await window.happyDOM.close(); }
 });
