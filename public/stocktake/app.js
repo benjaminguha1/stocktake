@@ -10,6 +10,8 @@ import {
   supplierCode,
 } from './storage.js';
 import { canUndoReceipt, orderClipboardText, receiptChange, supplierOrderLink } from './order-workflow.js';
+import { matchInvoiceText } from './invoice-workflow.js';
+import { dailyTasks, managerExceptions } from './operations.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -92,6 +94,8 @@ const tableSort = {
 let onlineSaveQueue = Promise.resolve();
 let onlineStorageAvailable = false;
 let onlineUser = null;
+const REMINDER_KEY = 'josieCoffeeStockroom.reminders.v1';
+const ONBOARDING_KEY = 'josieCoffeeStockroom.onboarding.v1';
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -413,6 +417,145 @@ function toast(message) {
   toastTimer = setTimeout(() => node.classList.remove('show'), 3200);
 }
 
+function activeOperations() {
+  return dailyTasks(state, { activeProducts: activeProducts() });
+}
+
+function currentExceptions() {
+  return managerExceptions(state, { activeProducts: activeProducts() });
+}
+
+function renderDailyTasks() {
+  const node = $('#daily-tasks');
+  if (!node) return;
+  const tasks = activeOperations();
+  node.innerHTML = tasks.length ? tasks.map((task) => `<label class="daily-task-row"><input type="checkbox" data-task-complete="${escapeHtml(task.id)}" ${task.kind === 'system' ? 'aria-label="Open task"' : 'aria-label="Mark task complete"'} /><span><strong>${escapeHtml(task.title)}</strong><small>Assigned to ${escapeHtml(task.assignedTo || 'Today’s team')}${task.dueDate ? ` · Due ${displayDate(`${task.dueDate}T00:00:00`)}` : ''}</small></span>${task.route ? `<button class="button secondary compact" type="button" data-route="${escapeHtml(task.route)}">Open</button>` : ''}</label>`).join('') : '<div class="daily-task-empty">Everything for today is complete.</div>';
+  const settings = loadReminderSettings();
+  $('#reminder-banner')?.remove();
+  if (settings.enabled && tasks.length) {
+    node.closest('.daily-tasks-panel').insertAdjacentHTML('beforebegin', `<div class="reminder-banner" id="reminder-banner"><span><strong>${tasks.length} task${tasks.length === 1 ? '' : 's'} waiting.</strong> Reminders are on for ${escapeHtml(settings.time)}.</span><button class="text-button" data-action="open-reminder-settings">Change</button></div>`);
+  }
+}
+
+function renderExceptions() {
+  const items = currentExceptions();
+  const high = items.filter((item) => item.severity === 'high').length;
+  const count = $('#exception-count');
+  if (count) count.textContent = items.length;
+  const summary = $('#exception-summary');
+  if (summary) summary.innerHTML = `<article><strong>${items.length}</strong><span>open exceptions</span></article><article><strong>${high}</strong><span>need prompt review</span></article><article><strong>${items.filter((item) => item.attachment).length}</strong><span>include a photo</span></article>`;
+  const list = $('#exception-list');
+  if (!list) return;
+  list.innerHTML = items.length ? items.map((item) => `<article class="exception-card ${escapeHtml(item.severity)}"><i class="exception-dot" aria-hidden="true"></i><div><div class="exception-type">${escapeHtml(item.type)}</div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.detail)}</small>${item.attachment?.url ? `<a href="${escapeHtml(item.attachment.url)}" target="_blank" rel="noopener"><img class="attachment-thumb" src="${escapeHtml(item.attachment.url)}" alt="Attached issue photo" /></a>` : ''}</div><div class="exception-actions">${item.route && item.route !== 'exceptions' ? `<button class="button secondary compact" data-route="${escapeHtml(item.route)}">Review</button>` : ''}${item.manual ? `<button class="button secondary compact" data-resolve-issue="${escapeHtml(item.id)}">Resolve</button>` : ''}</div></article>`).join('') : '<div class="no-orders"><strong>No exceptions need review.</strong><span>Short deliveries, skipped counts and staff reports will appear here.</span></div>';
+}
+
+function openTaskForm() {
+  modal('Add a task', 'Assign a clear job for today or a future shift.', `<form id="task-form" class="form-grid"><div class="field full"><label>Task</label><input name="title" maxlength="120" required placeholder="For example, count the dry store" /></div><div class="field"><label>Assigned to</label><input name="assignedTo" maxlength="60" placeholder="Today’s team" /></div><div class="field"><label>Due date</label><input name="dueDate" type="date" value="${new Date().toISOString().slice(0, 10)}" required /></div></form>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" form="task-form" type="submit">Add task</button>');
+  $('#task-form').addEventListener('submit', (event) => {
+    event.preventDefault(); const values = new FormData(event.currentTarget);
+    state.tasks ||= []; state.tasks.push({ id: `task-${Date.now()}`, title: String(values.get('title')).trim(), assignedTo: String(values.get('assignedTo')).trim() || 'Today’s team', dueDate: String(values.get('dueDate')), createdAt: new Date().toISOString(), createdBy: onlineUser?.username || '' });
+    persist(); renderAll(); closeModal(); toast('Task added.');
+  });
+}
+
+function loadReminderSettings() {
+  try { return { enabled: false, time: '09:00', ...JSON.parse(localStorage.getItem(REMINDER_KEY) || '{}') }; } catch { return { enabled: false, time: '09:00' }; }
+}
+
+function openReminderSettings() {
+  const settings = loadReminderSettings();
+  modal('Task reminders', 'Show a gentle browser reminder while Stocktake is open.', `<form id="reminder-form" class="form-grid"><label class="field full"><span>Reminders</span><select name="enabled"><option value="yes" ${settings.enabled ? 'selected' : ''}>On</option><option value="no" ${!settings.enabled ? 'selected' : ''}>Off</option></select></label><label class="field full"><span>Reminder time</span><input name="time" type="time" value="${escapeHtml(settings.time)}" required /></label></form>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" form="reminder-form" type="submit">Save reminders</button>');
+  $('#reminder-form').addEventListener('submit', async (event) => {
+    event.preventDefault(); const values = new FormData(event.currentTarget); const enabled = values.get('enabled') === 'yes';
+    if (enabled && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
+    localStorage.setItem(REMINDER_KEY, JSON.stringify({ enabled, time: String(values.get('time')) })); renderDailyTasks(); closeModal(); toast(enabled ? 'Task reminders are on.' : 'Task reminders are off.');
+  });
+}
+
+function checkReminders() {
+  const settings = loadReminderSettings(); if (!settings.enabled || !activeOperations().length) return;
+  const now = new Date(); const todayKey = `josieCoffeeStockroom.reminded.${now.toISOString().slice(0, 10)}`;
+  if (localStorage.getItem(todayKey) || now.toTimeString().slice(0, 5) < settings.time) return;
+  localStorage.setItem(todayKey, '1');
+  if ('Notification' in window && Notification.permission === 'granted') new Notification('Josie Coffee Stocktake', { body: `${activeOperations().length} task${activeOperations().length === 1 ? '' : 's'} waiting today.` });
+  toast(`${activeOperations().length} task${activeOperations().length === 1 ? '' : 's'} waiting today.`);
+}
+
+async function uploadAttachment(file) {
+  if (!file) return null;
+  const form = new FormData(); form.set('file', file);
+  const response = await fetch('/api/attachments', { method: 'POST', body: form });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || 'Photo upload failed.');
+  return result;
+}
+
+let tesseractLoader;
+function loadInvoiceReader() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (tesseractLoader) return tesseractLoader;
+  tesseractLoader = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    script.async = true;
+    script.onload = () => resolve(window.Tesseract);
+    script.onerror = () => reject(new Error('Invoice reading could not start. Check the connection and try again.'));
+    document.head.append(script);
+  });
+  return tesseractLoader;
+}
+
+function savePhotoReceipt(items, quantities, note, attachment) {
+  const lines = items.map((product) => ({ product, ...receiptChange(product, quantities.get(product.id), false) }));
+  const receivedAt = new Date().toISOString();
+  const receipt = { id: `receipt-${Date.now()}`, receivedAt, receivedBy: onlineUser?.username || '', source: 'invoice-photo', note, attachment, lines: lines.map(({ product, ...line }) => ({ productId: product.id, name: product.name, supplierId: product.supplierId, unit: product.unit, closedRemaining: false, ...line })) };
+  lines.forEach(({ product, stockAfter, remainingQuantity, onOrderAtAfter }) => { product.current = stockAfter; product.onOrderQuantity = remainingQuantity; product.onOrderAt = onOrderAtAfter; });
+  state.deliveryReceipts ||= []; state.deliveryReceipts.push(receipt); persist(); renderAll();
+  return { receipt, total: lines.reduce((sum, line) => sum + line.receivedQuantity, 0) };
+}
+
+async function readInvoicePhoto(file) {
+  if (!file) return;
+  if (!file.type.startsWith('image/')) return toast('Choose a photo of the invoice.');
+  modal('Reading invoice', 'Keep this screen open while the product lines are read.', '<div class="invoice-progress"><strong id="invoice-progress-label">Preparing image…</strong><p>This normally takes under a minute. The result will be shown for review before stock changes.</p></div>');
+  try {
+    const Tesseract = await loadInvoiceReader();
+    const result = await Tesseract.recognize(file, 'eng', { logger: (message) => {
+      const label = $('#invoice-progress-label');
+      if (label && message.status) label.textContent = `${message.status.replace(/^./, (letter) => letter.toUpperCase())}${Number.isFinite(message.progress) ? ` · ${Math.round(message.progress * 100)}%` : ''}`;
+    } });
+    const matches = matchInvoiceText(result?.data?.text || '', activeProducts());
+    const byProduct = new Map(matches.map((match) => [match.productId, match]));
+    const rows = activeProducts().filter((product) => byProduct.has(product.id) || isOnOrder(product));
+    if (!rows.length) throw new Error('No products could be matched. Check that the invoice names resemble the product names in Stocktake.');
+    const preview = URL.createObjectURL(file);
+    modal('Review invoice quantities', `${matches.length} product${matches.length === 1 ? '' : 's'} matched automatically. Check every quantity before updating stock.`, `<form id="invoice-review-form"><img class="photo-preview" src="${escapeHtml(preview)}" alt="Invoice being reviewed" /><div class="invoice-match-list">${rows.map((product) => { const match = byProduct.get(product.id); const value = match?.quantity ?? ''; return `<label class="invoice-match-row"><span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(supplierName(product))} · ${match ? `${Math.round(match.confidence * 100)}% match` : 'Not found on invoice'}${isOnOrder(product) ? ` · ${formatQuantity(product, onOrderQuantity(product))} expected` : ''}</small></span><span class="order-review-input"><span>Received</span><input type="number" name="invoice-${product.id}" min="0" step="0.1" value="${escapeHtml(value)}" placeholder="0" /></span></label>`; }).join('')}</div><label class="order-note-field">Receipt note (optional)<textarea name="note" maxlength="500" placeholder="Invoice number or delivery note"></textarea></label></form>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" form="invoice-review-form" type="submit">Update stock</button>');
+    $('#invoice-review-form').addEventListener('submit', async (event) => {
+      event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); const quantities = new Map();
+      for (const product of rows) { const raw = String(values.get(`invoice-${product.id}`) || '').trim(); if (!raw) continue; const quantity = Number(raw); if (!Number.isFinite(quantity) || quantity < 0) return toast('Every entered quantity must be zero or greater.'); if (quantity > 0) quantities.set(product.id, quantity); }
+      const received = rows.filter((product) => quantities.has(product.id)); if (!received.length) return toast('Enter at least one received quantity.');
+      const submit = $('#modal .button.primary'); submit.disabled = true; submit.textContent = 'Saving photo…';
+      try {
+        const attachment = await uploadAttachment(file); const saved = savePhotoReceipt(received, quantities, String(values.get('note') || '').trim(), attachment); URL.revokeObjectURL(preview); closeModal(); setRoute('deliveries'); toast(`Invoice received. ${formatNumber(saved.total)} units added to stock.`);
+      } catch (error) { submit.disabled = false; submit.textContent = 'Update stock'; toast(error.message); }
+    });
+  } catch (error) {
+    modal('Invoice could not be read', '', `<p class="modal-intro">${escapeHtml(error.message)}</p><p class="modal-intro">You can still select the delivery lines below and enter the received quantities manually.</p>`, '<button class="button primary" data-action="close-modal">Return to deliveries</button>');
+  }
+}
+
+function reportIssue() {
+  modal('Report a stock issue', 'Add a photo when something is damaged, missing or delivered incorrectly.', `<form id="issue-form" class="form-grid"><div class="field"><label>Issue type</label><select name="type"><option>Damaged stock</option><option>Missing stock</option><option>Delivery problem</option><option>Other issue</option></select></div><div class="field"><label>Title</label><input name="title" maxlength="100" required placeholder="What happened?" /></div><div class="field full"><label>Note</label><textarea name="note" maxlength="500" rows="4" required placeholder="Add the useful details"></textarea></div><label class="photo-field field full">Photo (optional)<input name="photo" type="file" accept="image/*" capture="environment" /></label></form>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" form="issue-form" type="submit">Send for review</button>');
+  $('#issue-form').addEventListener('submit', async (event) => {
+    event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); const submit = $('#modal .button.primary'); submit.disabled = true; submit.textContent = 'Saving…';
+    try {
+      const photo = form.elements.photo.files[0]; const attachment = photo ? await uploadAttachment(photo) : null;
+      state.issues ||= []; state.issues.unshift({ id: `issue-${Date.now()}`, type: String(values.get('type')), title: String(values.get('title')).trim(), note: String(values.get('note')).trim(), attachment, createdAt: new Date().toISOString(), createdBy: onlineUser?.username || '', severity: 'medium' });
+      persist(); renderAll(); closeModal(); toast('Issue sent for manager review.');
+    } catch (error) { submit.disabled = false; submit.textContent = 'Send for review'; toast(error.message); }
+  });
+}
+
 function renderDashboard() {
   const products = activeProducts();
   const orders = getOrders();
@@ -602,7 +745,7 @@ function renderDeliveries() {
     $('#delivery-bulk-actions').after(historyNode);
   }
   const receipts = [...(state.deliveryReceipts || [])].sort((a, b) => new Date(b.receivedAt) - new Date(a.receivedAt)).slice(0, 8);
-  historyNode.innerHTML = receipts.length ? `<h3>Recent receipts</h3><div class="history-list">${receipts.map((receipt) => { const lines = Array.isArray(receipt.lines) ? receipt.lines : []; return `<div class="history-row"><span><strong>${lines.length} delivery line${lines.length === 1 ? '' : 's'}</strong><small>${escapeHtml(receipt.note || 'No note')}</small></span><span>${displayDate(receipt.receivedAt)}<small>${formatNumber(lines.reduce((sum, line) => sum + Number(line.receivedQuantity || 0), 0))} units received</small></span></div>`; }).join('')}</div>` : '';
+  historyNode.innerHTML = receipts.length ? `<h3>Recent receipts</h3><div class="history-list">${receipts.map((receipt) => { const lines = Array.isArray(receipt.lines) ? receipt.lines : []; return `<div class="history-row"><span><strong>${lines.length} delivery line${lines.length === 1 ? '' : 's'}${receipt.source === 'invoice-photo' ? ' · Invoice photo' : ''}</strong><small>${escapeHtml(receipt.note || 'No note')}</small>${receipt.attachment?.url ? `<a href="${escapeHtml(receipt.attachment.url)}" target="_blank" rel="noopener"><img class="attachment-thumb" src="${escapeHtml(receipt.attachment.url)}" alt="Receipt photo" /></a>` : ''}</span><span>${displayDate(receipt.receivedAt)}<small>${formatNumber(lines.reduce((sum, line) => sum + Number(line.receivedQuantity || 0), 0))} units received</small></span></div>`; }).join('')}</div>` : '';
 }
 
 function placeSelectedOnOrder() {
@@ -652,8 +795,8 @@ function placeSelectedOnOrder() {
 function receiveSelectedDeliveries() {
   const deliveries = onOrderProducts().filter((product) => selectedDeliveryProductIds.has(product.id));
   if (!deliveries.length) return toast('Select one or more incoming products to receive.');
-  modal('Review received quantities', 'Enter what actually arrived. Any shortage stays on order unless you explicitly close the remaining quantity.', `<form id="receipt-review-form" class="order-review-list">${deliveries.map((product) => `<div class="order-review-row receipt-review-row"><span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(supplierName(product))} · Expected ${formatQuantity(product, onOrderQuantity(product))}</small></span><div class="receipt-review-controls"><label class="order-review-input"><span>Actually received</span><input type="number" name="actual-${product.id}" min="0" step="0.1" value="${onOrderQuantity(product)}" required aria-label="Actual quantity received for ${escapeHtml(product.name)}" /></label><label class="close-remainder"><input type="checkbox" name="close-${product.id}" /> Close any remaining quantity</label></div></div>`).join('')}<label class="order-note-field">Receipt note (optional)<textarea name="note" maxlength="500" placeholder="Delivery docket, shortages or damaged stock"></textarea></label></form>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" form="receipt-review-form" type="submit">Confirm received quantities</button>');
-  $('#receipt-review-form').addEventListener('submit', (event) => {
+  modal('Review received quantities', 'Enter what actually arrived. Any shortage stays on order unless you explicitly close the remaining quantity.', `<form id="receipt-review-form" class="order-review-list">${deliveries.map((product) => `<div class="order-review-row receipt-review-row"><span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(supplierName(product))} · Expected ${formatQuantity(product, onOrderQuantity(product))}</small></span><div class="receipt-review-controls"><label class="order-review-input"><span>Actually received</span><input type="number" name="actual-${product.id}" min="0" step="0.1" value="${onOrderQuantity(product)}" required aria-label="Actual quantity received for ${escapeHtml(product.name)}" /></label><label class="close-remainder"><input type="checkbox" name="close-${product.id}" /> Close any remaining quantity</label></div></div>`).join('')}<label class="order-note-field">Receipt note (optional)<textarea name="note" maxlength="500" placeholder="Delivery docket, shortages or damaged stock"></textarea></label><label class="photo-field">Photo (optional)<input name="photo" type="file" accept="image/*" capture="environment" /></label></form>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" form="receipt-review-form" type="submit">Confirm received quantities</button>');
+  $('#receipt-review-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
     let lines;
@@ -662,8 +805,12 @@ function receiveSelectedDeliveries() {
     } catch (error) {
       return toast(error.message);
     }
+    const submit = $('#modal .button.primary'); submit.disabled = true; submit.textContent = 'Saving…';
+    let attachment = null;
+    try { attachment = event.currentTarget.elements.photo.files[0] ? await uploadAttachment(event.currentTarget.elements.photo.files[0]) : null; }
+    catch (error) { submit.disabled = false; submit.textContent = 'Confirm received quantities'; return toast(error.message); }
     const receivedAt = new Date().toISOString();
-    const receipt = { id: `receipt-${Date.now()}`, receivedAt, note: String(values.get('note') || '').trim(), lines: lines.map(({ product, ...line }) => ({ productId: product.id, name: product.name, supplierId: product.supplierId, closedRemaining: values.has(`close-${product.id}`), ...line })) };
+    const receipt = { id: `receipt-${Date.now()}`, receivedAt, receivedBy: onlineUser?.username || '', note: String(values.get('note') || '').trim(), attachment, lines: lines.map(({ product, ...line }) => ({ productId: product.id, name: product.name, supplierId: product.supplierId, unit: product.unit, closedRemaining: values.has(`close-${product.id}`), ...line })) };
     lines.forEach(({ product, stockAfter, remainingQuantity, onOrderAtAfter }) => {
       product.current = stockAfter;
       product.onOrderQuantity = remainingQuantity;
@@ -782,6 +929,8 @@ function renderAll() {
   renderOrders();
   renderDeliveries();
   renderInsights();
+  renderDailyTasks();
+  renderExceptions();
   refreshSortButtons();
 }
 
@@ -792,7 +941,7 @@ function setRoute(route) {
   const secondaryNavigation = $('.secondary-nav');
   if (secondaryNavigation && ['products', 'suppliers', 'insights'].includes(route)) secondaryNavigation.open = true;
   const labels = {
-    dashboard: ['STOCKTAKE', 'Ready for your shift.'], products: ['INVENTORY', 'Product library'], suppliers: ['SUPPLIERS', 'Your ordering contacts.'], stocktake: ['COUNTING', 'Keep the shelves honest.'], orders: ['PURCHASING', 'Ready to order.'], deliveries: ['DELIVERIES', 'Incoming stock.'], insights: ['INSIGHTS', 'Learn your rhythm.'],
+    dashboard: ['STOCKTAKE', 'Ready for your shift.'], products: ['INVENTORY', 'Product library'], suppliers: ['SUPPLIERS', 'Your ordering contacts.'], stocktake: ['COUNTING', 'Keep the shelves honest.'], orders: ['PURCHASING', 'Ready to order.'], deliveries: ['DELIVERIES', 'Incoming stock.'], exceptions: ['EXCEPTIONS', 'Needs manager review.'], insights: ['INSIGHTS', 'Learn your rhythm.'],
   };
   $('#page-eyebrow').textContent = labels[route][0];
   $('#page-title').textContent = labels[route][1];
@@ -976,6 +1125,7 @@ async function startStocktake(type = 'full', group = '', options = {}) {
     <div class="mobile-stocktake">
       <div class="stocktake-step-meta"><span id="stocktake-step-label"></span><span id="stocktake-step-progress"></span></div>
       <div class="stocktake-step-bar"><span id="stocktake-step-bar"></span></div>
+      <div class="count-time" id="count-time"></div>
       <div class="count-jump"><select id="stocktake-jump" aria-label="Jump to a product"></select><button class="button secondary" id="stocktake-jump-button" type="button">Jump</button></div>
       <div id="stocktake-step"></div>
     </div>
@@ -1009,6 +1159,10 @@ async function startStocktake(type = 'full', group = '', options = {}) {
     $('#stocktake-step-label').textContent = `Product ${currentIndex + 1} of ${draft.products.length}`;
     $('#stocktake-step-progress').textContent = `${summary.counted} counted · ${summary.skipped} skipped`;
     $('#stocktake-step-bar').style.width = `${(summary.counted / draft.products.length) * 100}%`;
+    const timing = workflow.countTiming(draft);
+    const elapsedMinutes = Math.max(1, Math.ceil(timing.elapsedSeconds / 60));
+    const remainingText = timing.remainingSeconds === null ? 'Estimate appears after the first item' : timing.remainingSeconds < 60 ? 'Less than a minute left' : `About ${Math.ceil(timing.remainingSeconds / 60)} min left`;
+    $('#count-time').textContent = `${Math.round((summary.counted + summary.skipped) / draft.products.length * 100)}% reviewed · ${elapsedMinutes} min elapsed · ${remainingText}`;
     $('#stocktake-jump').innerHTML = draft.products.map((item, index) => {
       const decision = draft.entries[item.id]?.decision;
       const marker = decision === 'skipped' ? '○' : decision ? '✓' : '·';
@@ -1102,6 +1256,7 @@ async function startStocktake(type = 'full', group = '', options = {}) {
     const skippedProductIds = [];
     const removedProductIds = [];
     const previousStock = new Map();
+    const adjustments = [];
     const usageRecordStart = state.usageRecords.length;
     draft.products.forEach((snapshot) => {
       const entry = draft.entries[snapshot.id];
@@ -1114,11 +1269,12 @@ async function startStocktake(type = 'full', group = '', options = {}) {
       const before = Number(product.current) || 0;
       previousStock.set(product.id, before);
       if (entry.decision !== 'same') product.current = after;
+      adjustments.push({ productId: product.id, name: product.name, unit: product.unit, before, after, large: workflow.isLargeCountChange(before, after) });
       const consumed = Math.max(0, before - after);
       if (entry.decision !== 'same' && consumed > 0) state.usageRecords.push({ id: `u-${Date.now()}-${product.id}`, productId: product.id, amount: consumed, recordedAt: completedAt, source: 'stocktake' });
     });
     const skippedCount = skippedProductIds.length + removedProductIds.length;
-    state.stocktakes.unshift({ id: `st-${Date.now()}`, type: draft.type, group: draft.group, section: draft.type === 'section' ? draft.group : '', label: draft.label, productCount: countedProductIds.length, countedProductIds, skippedProductIds, removedProductIds, skippedCount, pendingCount: 0, complete: skippedCount === 0, startedAt: draft.startedAt, completedAt, completedBy: onlineUser?.username || '', locations: [...new Set(draft.products.map((product) => product.location))] });
+    state.stocktakes.unshift({ id: `st-${Date.now()}`, type: draft.type, group: draft.group, section: draft.type === 'section' ? draft.group : '', label: draft.label, productCount: countedProductIds.length, countedProductIds, skippedProductIds, removedProductIds, adjustments, skippedCount, pendingCount: 0, complete: skippedCount === 0, startedAt: draft.startedAt, completedAt, completedBy: onlineUser?.username || '', durationSeconds: Math.max(0, Math.round((new Date(completedAt) - new Date(draft.startedAt)) / 1000)), locations: [...new Set(draft.products.map((product) => product.location))] });
     try {
       persist();
     } catch (_) {
@@ -1342,7 +1498,23 @@ function handleSupplierUpload(file) {
 }
 
 function showHelp() {
-  modal('A quick guide', 'Your stockroom is built for the full café rhythm.', `<ul class="help-list"><li><b>Suppliers</b> are their own records. Give each one a stable ID, order instructions, preferred days and delivery contacts.</li><li><b>Products</b> link to a supplier ID, so spreadsheet imports only need that short code.</li><li><b>Stocktakes</b> update stock levels. When a level falls, the difference is saved as usage data.</li><li><b>Online storage</b> follows CoffeeCalc’s model: a shared database when deployed, plus this browser as an offline cache.</li></ul>`, '<button class="button primary" data-action="close-modal">Got it</button>');
+  modal('A quick guide', 'Your stockroom is built for the full café rhythm.', `<ul class="help-list"><li><b>Suppliers</b> are their own records. Give each one a stable ID, order instructions, preferred days and delivery contacts.</li><li><b>Products</b> link to a supplier ID, so spreadsheet imports only need that short code.</li><li><b>Stocktakes</b> update stock levels. Leave a count blank to skip it and enter 0 when none remains.</li><li><b>Invoice photos</b> propose delivery quantities. Always review them before updating stock.</li><li><b>Exceptions</b> gather shortages, skipped counts, overdue deliveries and staff reports for review.</li></ul>`, '<button class="button primary" data-action="close-modal">Got it</button>');
+}
+
+function showOnboarding() {
+  modal('Welcome to Stocktake', 'Three things to know before your first shift.', `<div class="onboarding-steps"><div class="onboarding-step"><b>1</b><span><strong>Count quickly</strong><small>Leave a quantity blank to skip it. Enter 0 when there is no stock.</small></span></div><div class="onboarding-step"><b>2</b><span><strong>Your progress is safe</strong><small>Save and exit at any time. Resume the count from the dashboard.</small></span></div><div class="onboarding-step"><b>3</b><span><strong>Check photos before saving</strong><small>Invoice quantities are matched automatically, then shown for your confirmation.</small></span></div></div>`, '<button class="button primary" id="finish-onboarding">Start my shift</button>');
+  $('#finish-onboarding').addEventListener('click', () => { localStorage.setItem(ONBOARDING_KEY, 'complete'); closeModal(); });
+}
+
+function renderGlobalSearch(query) {
+  const results = $('#global-search-results'); const text = String(query || '').trim().toLocaleLowerCase();
+  if (!text) { results.hidden = true; results.innerHTML = ''; return; }
+  const products = activeProducts().filter((product) => [product.name, product.sku, product.location, supplierName(product)].some((value) => String(value).toLocaleLowerCase().includes(text))).slice(0, 6);
+  const actions = [
+    ['Count stock', 'stocktake'], ['Receive delivery', 'deliveries'], ['Photograph invoice', 'deliveries'], ['Order stock', 'orders'], ['Review exceptions', 'exceptions'], ['Add product', 'products'], ['View suppliers', 'suppliers'],
+  ].filter(([label]) => label.toLocaleLowerCase().includes(text)).slice(0, 4);
+  results.hidden = false;
+  results.innerHTML = `${products.map((product) => `<button type="button" data-global-search-product="${escapeHtml(product.id)}"><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.sku)} · ${escapeHtml(product.location)} · ${escapeHtml(supplierName(product))}</small></button>`).join('')}${actions.map(([label, route]) => `<button type="button" data-route="${route}"><strong>${label}</strong><small>Go to ${route}</small></button>`).join('')}${!products.length && !actions.length ? '<div class="global-search-empty">No products or actions match that search.</div>' : ''}`;
 }
 
 document.addEventListener('click', (event) => {
@@ -1376,6 +1548,9 @@ document.addEventListener('click', (event) => {
     'download-usage': downloadUsage,
     'print-orders': () => window.print(),
     'show-help': showHelp,
+    'open-task-form': openTaskForm,
+    'open-reminder-settings': openReminderSettings,
+    'report-issue': reportIssue,
     'show-account': showAccount,
     'sign-out': signOut,
     'toggle-mobile-menu': toggleMobileMenu,
@@ -1436,8 +1611,22 @@ document.addEventListener('click', (event) => {
 $('#insight-range').addEventListener('change', renderInsights);
 $('#bulk-upload').addEventListener('change', (event) => { handleUpload(event.target.files[0]); event.target.value = ''; });
 $('#supplier-upload').addEventListener('change', (event) => { handleSupplierUpload(event.target.files[0]); event.target.value = ''; });
+$('#invoice-photo').addEventListener('change', (event) => { void readInvoicePhoto(event.target.files[0]); event.target.value = ''; });
+$('#global-search').addEventListener('input', (event) => renderGlobalSearch(event.target.value));
+$('#global-search').addEventListener('focus', (event) => renderGlobalSearch(event.target.value));
+document.addEventListener('click', (event) => {
+  const productResult = event.target.closest('[data-global-search-product]');
+  if (productResult) { productQuery = state.products.find((item) => item.id === productResult.dataset.globalSearchProduct)?.name || ''; $('#product-search').value = productQuery; $('#global-search').value = ''; $('#global-search-results').hidden = true; setRoute('products'); renderProducts(); }
+  const task = event.target.closest('[data-task-complete]');
+  if (task) { const item = (state.tasks || []).find((candidate) => candidate.id === task.dataset.taskComplete); if (item) { item.completedAt = new Date().toISOString(); item.completedBy = onlineUser?.username || ''; persist(); renderAll(); toast('Task completed.'); } else { const operation = activeOperations().find((candidate) => candidate.id === task.dataset.taskComplete); if (operation?.route) setRoute(operation.route); } }
+  const issue = event.target.closest('[data-resolve-issue]');
+  if (issue) { const item = (state.issues || []).find((candidate) => candidate.id === issue.dataset.resolveIssue); if (item) { item.resolvedAt = new Date().toISOString(); item.resolvedBy = onlineUser?.username || ''; persist(); renderAll(); toast('Issue resolved.'); } }
+  if (!event.target.closest('.global-search')) $('#global-search-results').hidden = true;
+});
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && $('#modal-layer').classList.contains('open')) closeModal(); });
 
 renderAll();
 setRoute(activeRoute);
 void initialiseOnlineState();
+window.setTimeout(() => { if (!localStorage.getItem(ONBOARDING_KEY) && !$('#account-layer:not([hidden])')) showOnboarding(); checkReminders(); }, 700);
+window.setInterval(checkReminders, 60_000);

@@ -123,3 +123,12 @@ export function isLargeCountChange(before, after) {
   if (!Number.isFinite(before) || !Number.isFinite(after)) return false;
   return Math.abs(after - before) >= Math.max(10, Math.abs(before) * 0.5);
 }
+
+export function countTiming(draft, now = new Date()) {
+  const completed = Object.values(draft?.entries || {}).filter((entry) => entry?.decision).length;
+  const total = Array.isArray(draft?.products) ? draft.products.length : 0;
+  const elapsedSeconds = Math.max(0, Math.round((now.getTime() - new Date(draft?.startedAt || now).getTime()) / 1000));
+  const averageSeconds = completed ? elapsedSeconds / completed : 0;
+  const remainingSeconds = completed ? Math.max(0, Math.round((total - completed) * averageSeconds)) : null;
+  return { completed, total, elapsedSeconds, remainingSeconds };
+}

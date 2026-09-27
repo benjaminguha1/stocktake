@@ -17,6 +17,7 @@ test('staff can resume a count, skip an item, receive a shortage, undo and archi
     ], usageRecords:[],stocktakes:[],orderHistory:[],deliveryReceipts:[],
   };
   window.localStorage.setItem('josieCoffeeStockroom.v2', JSON.stringify(initial));
+  window.localStorage.setItem('josieCoffeeStockroom.onboarding.v1', 'complete');
   Object.assign(globalThis,{window,document,FormData:window.FormData, localStorage:window.localStorage});
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: window.navigator });
   globalThis.fetch = async () => ({ok:false});

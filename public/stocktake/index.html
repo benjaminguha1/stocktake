@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="counting.css" />
     <link rel="stylesheet" href="orders.css" />
     <link rel="stylesheet" href="staff-home.css" />
+    <link rel="stylesheet" href="operations.css" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="app.js" type="module"></script>
     <script src="easy-access.js" type="module"></script>
@@ -30,6 +31,7 @@
           <button class="nav-item" data-route="stocktake"><span class="nav-icon">✓</span>Stocktake</button>
           <button class="nav-item" data-route="orders"><span class="nav-icon">↗</span>Order list <span class="nav-count warning" id="order-count">0</span></button>
           <button class="nav-item" data-route="deliveries"><span class="nav-icon">□</span>Deliveries <span class="nav-count" id="delivery-count">0</span></button>
+          <button class="nav-item" data-route="exceptions"><span class="nav-icon">!</span>Exceptions <span class="nav-count warning" id="exception-count">0</span></button>
           <details class="secondary-nav"><summary>Manage and reports</summary><div>
             <button class="nav-item" data-route="products"><span class="nav-icon">▦</span>Products <span class="nav-count" id="product-count">0</span></button>
             <button class="nav-item" data-route="suppliers"><span class="nav-icon">⌁</span>Suppliers</button>
@@ -46,6 +48,7 @@
         <header class="topbar">
           <div class="crumb"><span id="page-eyebrow">STOCKTAKE</span><h1 id="page-title">Good morning, Josie.</h1></div>
           <div class="topbar-actions">
+            <div class="global-search"><label><span>⌕</span><input id="global-search" type="search" placeholder="Find a product or action" autocomplete="off" aria-label="Search the stockroom" aria-controls="global-search-results" /></label><div id="global-search-results" class="global-search-results" hidden></div></div>
             <span class="save-status" id="save-status" data-state="connecting"><i aria-hidden="true"></i><span id="save-status-text">Connecting online…</span></span>
             <span class="today" id="today-label"></span>
             <button class="easy-access-trigger" type="button" aria-haspopup="dialog">Easy access</button>
@@ -68,6 +71,11 @@
           <section class="staff-home-panels">
             <div class="panel staff-resume" id="resume-count-slot"><p class="kicker">YOUR NEXT COUNT</p><h3>Ready when you are</h3><p class="muted">Start a count to keep today’s stock accurate.</p></div>
             <div class="panel staff-handover" id="staff-handover"><p class="kicker">STAFF HANDOVER</p><h3>Nothing to hand over yet</h3><p class="muted">Notes from the previous shift will appear here.</p></div>
+          </section>
+
+          <section class="panel daily-tasks-panel">
+            <div class="panel-heading"><div><p class="kicker">TODAY’S TASKS</p><h3>What needs doing</h3></div><div class="task-heading-actions"><button class="text-button" data-action="open-reminder-settings">Reminders</button><button class="button secondary compact" data-action="open-task-form">+ Add task</button></div></div>
+            <div id="daily-tasks" class="daily-task-list"></div>
           </section>
 
           <div class="metric-grid" id="metrics"></div>
@@ -126,10 +134,16 @@
         </section>
 
         <section id="deliveries" class="view" data-view="deliveries">
-          <div class="view-header"><div><p class="kicker">INCOMING STOCK</p><h2>Deliveries</h2><p class="muted">Receive incoming products to add them to the stock on hand.</p></div></div>
+          <div class="view-header"><div><p class="kicker">INCOMING STOCK</p><h2>Deliveries</h2><p class="muted">Receive incoming products to add them to the stock on hand.</p></div><div class="view-actions"><label class="button primary file-label">Photograph invoice<input id="invoice-photo" type="file" accept="image/*" capture="environment" hidden /></label><button class="button secondary" data-action="report-issue">Report an issue</button></div></div>
           <div class="order-summary" id="delivery-summary"></div>
           <section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th class="select-cell"><input id="select-all-deliveries" type="checkbox" aria-label="Select all incoming products" /></th><th><button class="sort-button" data-sort-table="deliveries" data-sort-key="name">Product <span>↕</span></button></th><th><button class="sort-button" data-sort-table="deliveries" data-sort-key="current">Current stock <span>↕</span></button></th><th><button class="sort-button" data-sort-table="deliveries" data-sort-key="status">Status <span>↕</span></button></th><th><button class="sort-button" data-sort-table="deliveries" data-sort-key="onOrder">On order <span>↕</span></button></th><th><button class="sort-button" data-sort-table="deliveries" data-sort-key="supplier">Supplier <span>↕</span></button></th><th><button class="sort-button active" data-sort-table="deliveries" data-sort-key="orderedAt">Ordered <span>↓</span></button></th><th></th></tr></thead><tbody id="deliveries-table"></tbody></table></div><div class="table-footer">Receiving stock adds the recorded on-order quantity to the current stock level.</div></section>
           <div class="order-bulk-actions" id="delivery-bulk-actions" hidden><span id="selected-delivery-count">0 selected</span><button class="button primary" data-action="receive-selected-deliveries">Mark received</button></div>
+        </section>
+
+        <section id="exceptions" class="view" data-view="exceptions">
+          <div class="view-header"><div><p class="kicker">MANAGER REVIEW</p><h2>Exceptions</h2><p class="muted">Shortages, overdue deliveries, skipped counts and unusual changes in one place.</p></div><button class="button secondary" data-action="report-issue">Report an issue</button></div>
+          <div class="exception-summary" id="exception-summary"></div>
+          <div class="exception-list" id="exception-list"></div>
         </section>
 
         <section id="insights" class="view" data-view="insights">

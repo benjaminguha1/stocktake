@@ -10,6 +10,8 @@ export function createInitialState() {
     stocktakes: [],
     orderHistory: [],
     deliveryReceipts: [],
+    tasks: [],
+    issues: [],
   };
 }
 
@@ -111,6 +113,8 @@ export function normaliseState(value) {
     stocktakes: Array.isArray(value.stocktakes) ? value.stocktakes : [],
     orderHistory: Array.isArray(value.orderHistory) ? value.orderHistory : [],
     deliveryReceipts: Array.isArray(value.deliveryReceipts) ? value.deliveryReceipts : [],
+    tasks: Array.isArray(value.tasks) ? value.tasks : [],
+    issues: Array.isArray(value.issues) ? value.issues : [],
   };
 }
 

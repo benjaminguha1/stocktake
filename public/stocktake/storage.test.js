@@ -51,7 +51,7 @@ test('persists a supplier-only stockroom and tracks its pending sync', () => {
 
   assert.equal(hasStoredState(storage), true);
   assert.equal(isStateSyncPending(storage), true);
-  assert.deepEqual(loadState(storage), { ...state, orderHistory: [], deliveryReceipts: [] });
+  assert.deepEqual(loadState(storage), { ...state, orderHistory: [], deliveryReceipts: [], tasks: [], issues: [] });
   assert.ok(storage.getItem(STORAGE_KEY));
 
   markStateSynced(storage);

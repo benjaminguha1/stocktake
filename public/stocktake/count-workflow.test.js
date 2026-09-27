@@ -11,6 +11,7 @@ import {
   saveCountDraft,
   sortCountProducts,
   validateCount,
+  countTiming,
 } from './count-workflow.js';
 
 function memoryStorage() {
@@ -70,4 +71,9 @@ test('flags materially large adjustments for final review', () => {
   assert.equal(isLargeCountChange(100, 49), true);
   assert.equal(isLargeCountChange(100, 60), false);
   assert.equal(isLargeCountChange(4, 15), true);
+});
+
+test('estimates remaining count time from completed entries', () => {
+  const draft = { startedAt: '2026-09-28T10:00:00Z', products: [{ id: 'a' }, { id: 'b' }, { id: 'c' }], entries: { a: { decision: 'counted' } } };
+  assert.deepEqual(countTiming(draft, new Date('2026-09-28T10:01:00Z')), { completed: 1, total: 3, elapsedSeconds: 60, remainingSeconds: 120 });
 });
