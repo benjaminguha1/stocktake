@@ -10,7 +10,7 @@ import {
   supplierCode,
 } from './storage.js';
 import { canUndoReceipt, orderClipboardText, receiptChange, supplierOrderLink } from './order-workflow.js';
-import { matchInvoiceText } from './invoice-workflow.js';
+import { matchInvoiceTexts } from './invoice-workflow.js';
 import { dailyTasks, managerExceptions } from './operations.js';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -496,13 +496,51 @@ function loadInvoiceReader() {
   if (tesseractLoader) return tesseractLoader;
   tesseractLoader = new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
     script.async = true;
     script.onload = () => resolve(window.Tesseract);
     script.onerror = () => reject(new Error('Invoice reading could not start. Check the connection and try again.'));
     document.head.append(script);
   });
   return tesseractLoader;
+}
+
+async function invoiceImageVariants(file) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const makeCanvas = ({ left = 0, width = 1, top = 0, height = 1, maxSide = 2800, contrast = 1.7, threshold = null }) => {
+    const sourceX = Math.round(bitmap.width * left);
+    const sourceWidth = Math.round(bitmap.width * width);
+    const sourceY = Math.round(bitmap.height * top);
+    const sourceHeight = Math.round(bitmap.height * height);
+    const scale = Math.min(1.45, maxSide / Math.max(sourceWidth, sourceHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+    const context = canvas.getContext('2d', { willReadFrequently: threshold !== null });
+    context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.filter = `grayscale(1) contrast(${contrast})`;
+    context.drawImage(bitmap, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+    context.filter = 'none';
+    if (threshold !== null) {
+      const image = context.getImageData(0, 0, canvas.width, canvas.height);
+      for (let index = 0; index < image.data.length; index += 4) {
+        const value = image.data[index] < threshold ? 0 : 255;
+        image.data[index] = value; image.data[index + 1] = value; image.data[index + 2] = value; image.data[index + 3] = 255;
+      }
+      context.putImageData(image, 0, 0);
+    }
+    return canvas;
+  };
+  // Most supplier line-item tables sit through the middle of a portrait photo.
+  // Scan that area at extra resolution twice, then scan the whole page so
+  // unusual invoice layouts still work.
+  const variants = [
+    { image: makeCanvas({ left: .055, width: .94, top: .27, height: .46, maxSide: 3200, contrast: 1.9 }), pageSegmentation: '6', label: 'line-item detail' },
+    { image: makeCanvas({ left: .055, width: .94, top: .27, height: .46, maxSide: 3200, contrast: 1.55, threshold: 184 }), pageSegmentation: '11', label: 'high-contrast detail' },
+    { image: makeCanvas({ maxSide: 2800, contrast: 1.7 }), pageSegmentation: '6', label: 'full invoice' },
+  ];
+  bitmap.close?.();
+  return variants;
 }
 
 function savePhotoReceipt(items, quantities, note, attachment) {
@@ -517,19 +555,31 @@ function savePhotoReceipt(items, quantities, note, attachment) {
 async function readInvoicePhoto(file) {
   if (!file) return;
   if (!file.type.startsWith('image/')) return toast('Choose a photo of the invoice.');
-  modal('Reading invoice', 'Keep this screen open while the product lines are read.', '<div class="invoice-progress"><strong id="invoice-progress-label">Preparing image…</strong><p>This normally takes under a minute. The result will be shown for review before stock changes.</p></div>');
+  modal('Reading invoice carefully', 'Keep this screen open while three enhanced scans compare the product lines.', '<div class="invoice-progress"><strong id="invoice-progress-label">Preparing high-resolution image…</strong><p>This can take one to three minutes on a phone. The result will be shown for review before stock changes.</p><div class="invoice-pass-list"><span id="invoice-pass-1">1 · Line-item detail</span><span id="invoice-pass-2">2 · High-contrast detail</span><span id="invoice-pass-3">3 · Full invoice</span></div></div>');
   try {
     const Tesseract = await loadInvoiceReader();
-    const result = await Tesseract.recognize(file, 'eng', { logger: (message) => {
+    const variants = await invoiceImageVariants(file);
+    let passIndex = 0;
+    const worker = await Tesseract.createWorker('eng', 1, { logger: (message) => {
       const label = $('#invoice-progress-label');
-      if (label && message.status) label.textContent = `${message.status.replace(/^./, (letter) => letter.toUpperCase())}${Number.isFinite(message.progress) ? ` · ${Math.round(message.progress * 100)}%` : ''}`;
+      if (label && message.status) label.textContent = `Scan ${passIndex + 1} of ${variants.length} · ${message.status.replace(/^./, (letter) => letter.toUpperCase())}${Number.isFinite(message.progress) ? ` · ${Math.round(message.progress * 100)}%` : ''}`;
     } });
-    const matches = matchInvoiceText(result?.data?.text || '', activeProducts());
+    const texts = [];
+    try {
+      for (passIndex = 0; passIndex < variants.length; passIndex += 1) {
+        const pass = variants[passIndex];
+        await worker.setParameters({ tessedit_pageseg_mode: pass.pageSegmentation, preserve_interword_spaces: '1' });
+        const result = await worker.recognize(pass.image);
+        texts.push(result?.data?.text || '');
+        const status = $(`#invoice-pass-${passIndex + 1}`); if (status) status.classList.add('complete');
+      }
+    } finally { await worker.terminate(); }
+    const matches = matchInvoiceTexts(texts, activeProducts());
     const byProduct = new Map(matches.map((match) => [match.productId, match]));
     const rows = activeProducts().filter((product) => byProduct.has(product.id) || isOnOrder(product));
     if (!rows.length) throw new Error('No products could be matched. Check that the invoice names resemble the product names in Stocktake.');
     const preview = URL.createObjectURL(file);
-    modal('Review invoice quantities', `${matches.length} product${matches.length === 1 ? '' : 's'} matched automatically. Check every quantity before updating stock.`, `<form id="invoice-review-form"><img class="photo-preview" src="${escapeHtml(preview)}" alt="Invoice being reviewed" /><div class="invoice-match-list">${rows.map((product) => { const match = byProduct.get(product.id); const value = match?.quantity ?? ''; return `<label class="invoice-match-row"><span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(supplierName(product))} · ${match ? `${Math.round(match.confidence * 100)}% match` : 'Not found on invoice'}${isOnOrder(product) ? ` · ${formatQuantity(product, onOrderQuantity(product))} expected` : ''}</small></span><span class="order-review-input"><span>Received</span><input type="number" name="invoice-${product.id}" min="0" step="0.1" value="${escapeHtml(value)}" placeholder="0" /></span></label>`; }).join('')}</div><label class="order-note-field">Receipt note (optional)<textarea name="note" maxlength="500" placeholder="Invoice number or delivery note"></textarea></label></form>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" form="invoice-review-form" type="submit">Update stock</button>');
+    modal('Review invoice quantities', `${matches.length} product${matches.length === 1 ? '' : 's'} matched automatically. Check every quantity before updating stock.`, `<form id="invoice-review-form"><img class="photo-preview" src="${escapeHtml(preview)}" alt="Invoice being reviewed" /><div class="invoice-match-list">${rows.map((product) => { const match = byProduct.get(product.id); const value = match?.quantity ?? ''; const quality = match ? match.quantitySource === 'guess' ? 'Check quantity closely' : match.passesAgreed > 1 ? `Quantity confirmed in ${match.passesAgreed} scans` : 'Quantity-column match' : 'Not found on invoice'; return `<label class="invoice-match-row"><span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(supplierName(product))} · ${escapeHtml(quality)}${isOnOrder(product) ? ` · ${formatQuantity(product, onOrderQuantity(product))} expected` : ''}</small></span><span class="order-review-input"><span>Received</span><input type="number" name="invoice-${product.id}" min="0" step="0.1" value="${escapeHtml(value)}" placeholder="0" /></span></label>`; }).join('')}</div><label class="order-note-field">Receipt note (optional)<textarea name="note" maxlength="500" placeholder="Invoice number or delivery note"></textarea></label></form>`, '<button class="button secondary" data-action="close-modal">Cancel</button><button class="button primary" form="invoice-review-form" type="submit">Update stock</button>');
     $('#invoice-review-form').addEventListener('submit', async (event) => {
       event.preventDefault(); const form = event.currentTarget; const values = new FormData(form); const quantities = new Map();
       for (const product of rows) { const raw = String(values.get(`invoice-${product.id}`) || '').trim(); if (!raw) continue; const quantity = Number(raw); if (!Number.isFinite(quantity) || quantity < 0) return toast('Every entered quantity must be zero or greater.'); if (quantity > 0) quantities.set(product.id, quantity); }
