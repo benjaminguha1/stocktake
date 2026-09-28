@@ -481,9 +481,34 @@ function checkReminders() {
   toast(`${activeOperations().length} task${activeOperations().length === 1 ? '' : 's'} waiting today.`);
 }
 
+const MAX_ATTACHMENT_UPLOAD_BYTES = 850 * 1024;
+
+async function prepareAttachmentImage(file) {
+  if (!file || file.size <= MAX_ATTACHMENT_UPLOAD_BYTES) return file;
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const scale = Math.min(1, 1400 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  const encode = (quality) => new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('The photo could not be prepared for upload.')), 'image/jpeg', quality));
+  let blob;
+  for (const quality of [.82, .7, .58, .46]) {
+    blob = await encode(quality);
+    if (blob.size <= MAX_ATTACHMENT_UPLOAD_BYTES) break;
+  }
+  if (blob.size > MAX_ATTACHMENT_UPLOAD_BYTES) throw new Error('The photo is too large to save. Try taking it closer to the invoice.');
+  const name = String(file.name || 'invoice.jpg').replace(/\.[^.]+$/, '') || 'invoice';
+  return new File([blob], `${name}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+}
+
 async function uploadAttachment(file) {
   if (!file) return null;
-  const form = new FormData(); form.set('file', file);
+  const prepared = await prepareAttachmentImage(file);
+  const form = new FormData(); form.set('file', prepared);
   const response = await fetch('/api/attachments', { method: 'POST', body: form });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || 'Photo upload failed.');
