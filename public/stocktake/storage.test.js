@@ -51,7 +51,7 @@ test('persists a supplier-only stockroom and tracks its pending sync', () => {
 
   assert.equal(hasStoredState(storage), true);
   assert.equal(isStateSyncPending(storage), true);
-  assert.deepEqual(loadState(storage), state);
+  assert.deepEqual(loadState(storage), { ...state, orderHistory: [], deliveryReceipts: [], tasks: [], issues: [] });
   assert.ok(storage.getItem(STORAGE_KEY));
 
   markStateSynced(storage);
@@ -163,4 +163,24 @@ test('keeps a placed order and its quantity in shared state', () => {
   const restored = loadState(storage).products[0];
   assert.equal(restored.onOrderQuantity, 620);
   assert.equal(restored.onOrderAt, '2026-08-10T00:00:00.000Z');
+});
+
+
+test('preserves archive flags, shelf order and handover history through a save/load', () => {
+  const storage = createStorage();
+  const state = { ...createInitialState(),
+    suppliers: [{ id: 'COFFEE', name: 'Coffee', archived: true }],
+    products: [{ id: 'beans', supplierId: 'COFFEE', archived: true, shelfOrder: 3 }],
+    stocktakes: [{ id: 'count', countedProductIds: ['beans'], skippedCount: 2 }],
+    orderHistory: [{ id: 'order', lines: [{ productId: 'beans', quantity: 6 }] }],
+    deliveryReceipts: [{ id: 'receipt', note: 'Short delivery', lines: [{ receivedQuantity: 4, remainingQuantity: 2 }] }],
+  };
+  saveState(state, storage);
+  const restored = loadState(storage);
+  assert.equal(restored.suppliers[0].archived, true);
+  assert.equal(restored.products[0].archived, true);
+  assert.equal(restored.products[0].shelfOrder, 3);
+  assert.deepEqual(restored.orderHistory, state.orderHistory);
+  assert.deepEqual(restored.deliveryReceipts, state.deliveryReceipts);
+  assert.deepEqual(restored.stocktakes, state.stocktakes);
 });
