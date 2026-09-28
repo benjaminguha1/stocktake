@@ -1,5 +1,8 @@
 function normalise(value) {
-  return String(value || '').toLocaleUpperCase().replace(/[^A-Z0-9.]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return String(value || '').toLocaleUpperCase()
+    .replace(/[^A-Z0-9.]+/g, ' ')
+    .replace(/\b(?:LOAF|LOAVES)\b/g, 'BREAD')
+    .replace(/\s+/g, ' ').trim();
 }
 
 function usefulTokens(value) {
@@ -16,23 +19,27 @@ function quantityCandidates(line) {
       let value = Number(raw.replace(',', '.'));
       // Some OCR passes drop the decimal point from invoice quantities such as
       // 2.000. Treat a compact trailing-000 token as a quantity, not 2,000 units.
-      if (!decimalPart && /^\d{1,3}000$/.test(raw) && value >= 1000) value /= 1000;
-      return { value, raw, decimals: decimalPart.length, packSize };
+      if (!decimalPart && /^\d000$/.test(raw)) value /= 1000;
+      const itemCode = !decimalPart && value >= 1000;
+      return { value, raw, decimals: decimalPart.length, packSize, itemCode };
     })
     .filter((candidate) => Number.isFinite(candidate.value) && candidate.value >= 0);
 }
 
 function chooseQuantity(line, expected) {
   const candidates = quantityCandidates(line);
-  const usable = candidates.filter((candidate) => !candidate.packSize);
+  const usable = candidates.filter((candidate) => !candidate.packSize && !candidate.itemCode);
   const expectedMatch = usable.find((candidate) => expected > 0 && candidate.value === expected);
   if (expectedMatch) return { quantity: expectedMatch.value, quantitySource: 'expected' };
   // Wholesale invoices normally print QTY with three decimal places, while
   // pack sizes are in the description and prices use two decimal places.
   const quantityColumn = usable.find((candidate) => candidate.decimals === 3);
   if (quantityColumn) return { quantity: quantityColumn.value, quantitySource: 'column' };
-  const integer = usable.find((candidate) => Number.isInteger(candidate.value) && candidate.value > 0 && (!expected || candidate.value <= expected * 2));
-  const fallback = integer || usable[0];
+  const integer = usable.find((candidate) => Number.isInteger(candidate.value) && candidate.value > 0 && candidate.value <= 999 && (!expected || candidate.value <= expected * 2));
+  if (integer) return { quantity: integer.value, quantitySource: 'integer' };
+  const measured = usable.find((candidate) => candidate.decimals > 0 && candidate.decimals <= 2 && candidate.value > 0 && candidate.value <= 999);
+  if (measured) return { quantity: measured.value, quantitySource: 'decimal' };
+  const fallback = usable[0];
   return fallback ? { quantity: fallback.value, quantitySource: 'guess' } : { quantity: expected, quantitySource: expected > 0 ? 'expected' : 'guess' };
 }
 
@@ -78,8 +85,14 @@ export function matchInvoiceText(text, products) {
 }
 
 export function matchInvoiceTexts(texts, products) {
-  const passes = texts.map((text) => matchInvoiceText(text, products));
-  return products.flatMap((product) => {
+  const combined = normalise(texts.join('\n'));
+  const namedSuppliers = [...new Set(products.map((product) => normalise(product.supplierName)).filter((name) => name.length >= 4))];
+  const detectedSuppliers = namedSuppliers.filter((name) => combined.includes(name));
+  const relevantProducts = detectedSuppliers.length
+    ? products.filter((product) => detectedSuppliers.includes(normalise(product.supplierName)))
+    : products;
+  const passes = texts.map((text) => matchInvoiceText(text, relevantProducts));
+  return relevantProducts.flatMap((product) => {
     const candidates = passes.flatMap((matches) => matches.filter((match) => match.productId === product.id));
     if (!candidates.length) return [];
     const reliable = candidates.filter((candidate) => candidate.quantitySource === 'column' || candidate.quantitySource === 'expected');

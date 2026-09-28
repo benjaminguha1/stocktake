@@ -599,7 +599,7 @@ async function readInvoicePhoto(file) {
         const status = $(`#invoice-pass-${passIndex + 1}`); if (status) status.classList.add('complete');
       }
     } finally { await worker.terminate(); }
-    const matches = matchInvoiceTexts(texts, activeProducts());
+    const matches = matchInvoiceTexts(texts, activeProducts().map((product) => ({ ...product, supplierName: supplierName(product) })));
     const byProduct = new Map(matches.map((match) => [match.productId, match]));
     const rows = activeProducts().filter((product) => byProduct.has(product.id) || isOnOrder(product));
     if (!rows.length) throw new Error('No products could be matched. Check that the invoice names resemble the product names in Stocktake.');
